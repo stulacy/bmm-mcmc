@@ -35,80 +35,111 @@ std::vector<int> get_ck(IntegerMatrix labels, int N, int step, int obs, int k) {
     return out;
 }
 
-// Collapsed Gibbs sampler
-// For each i in 1:N
-//  Sample z_i given (theta, z_(-i), x)
-// For k in 1:K
-//  Sample theta_k given (theta_(-k), z, x)
-//
-// Tu in Section 3.23 says needs to sample p(z | ...), p(pi | ...), and p(theta | ...)
-// But if use collapsed Gibbs then can sample p(z) directly
-// https://people.eecs.berkeley.edu/~stephentu/writeups/mixturemodels.pdf
-//
-// Eq 21 from Van Maarten also suggests can just use collapsed Gibbs sampler over z
-// this equation looks to be the same as Tu's version.
-// https://pdfs.semanticscholar.org/525c/ff658d34ae4d47e84b8ec4ede3ce6c561afc.pdf
-//
-// And this looks to be the same as 3.5 from Neal
-// http://www.stat.columbia.edu/npbayes/papers/neal_sampling.pdf
+// Using Algorithm 2 from
+// https://www4.stat.ncsu.edu/~wilson/prelim/Review1.pdf
 // [[Rcpp::export]]
-IntegerMatrix collapsed_gibbs_cpp(IntegerMatrix df,
-                                  IntegerVector initialK,
-                                  int nsamples,
-                                  int K,
-                                  double alpha,
-                                  double beta,
-                                  double gamma,
-                                  bool verbose) {
+IntegerMatrix gibbs_cpp(IntegerMatrix df,
+                        IntegerVector initialPi,
+                        NumericMatrix initialTheta,
+                        int nsamples,
+                        int K,
+                        double alpha,
+                        double beta,
+                        double gamma,
+                        bool verbose) {
 
     int N = df.nrow();
     int P = df.ncol();
 
+
     // Random sample for first row
-    IntegerMatrix allocations(nsamples, N);
-    int N_nk, sum_x;
-    std::vector<int> ck;
+    NumericMatrix pi_sampled(nsamples, K);
+    cube z_sampled(N, K, nsamples, int);
+    cube theta_sampled(K, P, nsamples, double);
+
+    int N_nk, sum_x, Znk;
     double frac, num_1, num_2, loglh, denom, contrib, cum_probs, dummy;
-    allocations(0, _) = initialK;
+    pi_sampled(0, _) = initialPi;
+    theta_sampled.slice(0) = initialTheta;
+    NumericMatrix thisTheta;
+    IntegerVector ck(K);
+    IntegerMatrix Vkd(K, D);
+
     for (int j=1; j < nsamples; j++) {
         Rcpp::Rcout << "Sample: " << j+1 << "\n";
-        // Set params
+
+        thisTheta = theta_sample.slice(j-1);
+
         for (int i=0; i < N; i++) {
-        //Rcpp::Rcout << "i: " << i << "\n";
+
+            //Rcpp::Rcout << "i: " << i << "\n";
             std::vector<double> probs(K);
+            NumericVector s(K);
+            IntegerVector this_z(K);
+
             cum_probs = 0;
+            loglh = 0;
+
+            // Calculate data likelihood
             for (int k=1; k <= K; k++) {
+                for (int d=0; d < P; d++) {
+                    loglh += df(i, d) * log(theta(k, d)) + (1 - df(i, d)) * log(1 - theta(k, d));
+                }
+
+                // Then calculate probabilities per cluster
+                dummy = exp(pi_sampled(j-1, k-1) + loglh);
+                s[k-1] = dummy;
+                cum_probs += dummy;
+            }
+
+            // Then normalise
+            for (int p = 0; p < K; p++) {
+                s[p] /= cum_probs;
+            }
+
+            // Now can draw labels
+            rmultinom(1, s.begin(), K, this_z.begin());
+            z_sampled.slice(j)(i, _) = this_z;
+        }
+
+        // Now sample pi and thetas
+        // Now calculate number of patients in each cluster and sum of data points as before
+        for (int k = 0; k < K; k++) {
+            ck[k] = 0;
+            for (int i=0; i < N; i++) {
+                Vkd(k, d) = 0;
+                Znk = z_sampled.slice(j)(i, k);
+                ck[k] += Znk;
+                for (int d = 0; d < N; d++) {
+                    Vkd(k, d) += Znk * df(i, d);
+
+                }
+
+
+
+            }
+
+        }
+
+
+
+
+
+
+
+
                 //Rcpp::Rcout << "k: " << k << "\n";
                 // Setup this set and its cardinality
-                ck = get_ck(allocations, N, j, i, k);
                 N_nk = ck.size();
                 //Rcpp::Rcout << "N_nk: " << N_nk << "\n";
-
-                // First half
-                frac = log(N_nk + alpha/K) - log(N - 1 + alpha);
-                if (verbose) Rcpp::Rcout << "Frac: " << frac << "\n";
 
                 // Second half is loglh
                 loglh = 0;
                 for (int d=0; d < P; d++) {
                     sum_x = calc_sumx(df, ck, d);
-                    //Rcpp::Rcout << "sum_x: " << sum_x << "\n";
-
-                    num_1 = df(i,d) * log(beta + sum_x);
-                    //Rcpp::Rcout << "num_1: " << num_1 << "\n";
-                    num_2 = (1-df(i,d)) * log(gamma + N_nk - sum_x);
-                    //Rcpp::Rcout << "num_2: " << num_2 << "\n";
-                    denom = log(beta + gamma + N_nk);
-                    //Rcpp::Rcout << "denom: " << denom << "\n";
-                    contrib = num_1 + num_2 - denom;
-                    //Rcpp::Rcout << "contrib: " << contrib << "\n";
-                    loglh = loglh + contrib;
                 }
-                if (verbose) Rcpp::Rcout << "loglh: " << loglh << "\n";
-                dummy = exp(frac+loglh);
-                probs[k-1] = dummy;
-                cum_probs += dummy;
             }
+
             if (verbose) {
                 Rcpp::Rcout << "raw probs: ";
                 for (double foo : probs) {
@@ -116,9 +147,7 @@ IntegerMatrix collapsed_gibbs_cpp(IntegerMatrix df,
                 }
                 Rcpp::Rcout << "\n";
             }
-            for (int p = 0; p < K; p++) {
-                probs[p] /= cum_probs;
-            }
+
             if (verbose) {
                 Rcpp::Rcout << "normalised probs: ";
                 for (double foo : probs) {

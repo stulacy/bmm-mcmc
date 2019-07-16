@@ -4,24 +4,8 @@
 # Then will finalise with infinite mixture using Dirichlet Process prior
 library(tidyverse)
 
-# Collapsed Gibbs sampler
-# For each i in 1:N
-#  Sample z_i given (theta, z_(-i), x)
-# For k in 1:K
-#  Sample theta_k given (theta_(-k), z, x)
-
-# Tu in Section 3.23 says needs to sample p(z | ...), p(pi | ...), and p(theta | ...)
-# But if use collapsed Gibbs then can sample p(z) directly
-# https://people.eecs.berkeley.edu/~stephentu/writeups/mixturemodels.pdf
-
-# Eq 21 from Van Maarten also suggests can just use collapsed Gibbs sampler over z
-# this equation looks to be the same as Tu's version.
-# https://pdfs.semanticscholar.org/525c/ff658d34ae4d47e84b8ec4ede3ce6c561afc.pdf
-
-# And this looks to be the same as 3.5 from Neal
-# http://www.stat.columbia.edu/npbayes/papers/neal_sampling.pdf
 gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, verbose=FALSE) {
-    
+
     N <- nrow(df)
     P <- ncol(df)
 
@@ -37,14 +21,14 @@ gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, verbo
                 # All points in current cluster except current data point. HOW DOES THIS DIFFER FROM N_nk?
                 ck <- allocations[j-1, -i] == k
                 N_nk <- sum(ck)
-    
+
                 frac <- log(N_nk + alpha/K) - log(N - 1 + alpha)
                 if (verbose) cat(sprintf("Frac: %f\n", frac))
-    
+
                 loglh <- 0
                 for (d in 1:P) {
                     sum_x <- sum(df[-i, ][ck, d])
-    
+
                     num_1 <- df[i,d] * log(beta + sum_x)
                     num_2 <- (1-df[i,d]) * log(gamma + N_nk - sum_x)
                     denom <- log(beta + gamma + N_nk)
@@ -71,18 +55,18 @@ gibbs_collapsed_cpp_wrapper <- function(df, nsamples, K, alpha=1, beta=0.5, gamm
     collapsed_gibbs_cpp(df, initial_K,
                         nsamples, K, alpha, beta, gamma, verbose)
 }
-    
+
 
 plot_gibbs <- function(samples) {
     K <- length(unique(samples[1, ]))
     nsamples <- nrow(samples)
     nobs <- ncol(samples)
     foo <- data.frame(t(apply(samples, 1, function(row) {
-                              sapply(1:K, function(x) sum(row == x))       
+                              sapply(1:K, function(x) sum(row == x))
     })))
     colnames(foo) <- paste0("Cluster", seq(K))
     foo$step <- 1:nsamples
-    
+
     foo %>%
         gather(cluster, num, -step) %>%
         mutate(prop = num/nobs) %>%
@@ -93,11 +77,11 @@ plot_gibbs <- function(samples) {
             theme_bw()
 }
 
-# Ok this has seemed to work on an easy dataset with 100 observations 
+# Ok this has seemed to work on an easy dataset with 100 observations
 # and 2 well separated classes
 df <- readRDS("data/K2_N100_P5_clean.rds")
-samples <- gibbs_collapsed(df, 1000, K=2)
-plot_gibbs(samples)
+samples_R <- gibbs_collapsed(df, 1000, K=2)
+plot_gibbs(samples_R)
 samples_cpp <- gibbs_collapsed_cpp_wrapper(df, 1000, K=2, verbose = FALSE)
 plot_gibbs(samples_cpp)
 
@@ -113,11 +97,6 @@ plot_gibbs(samples)
 # Let's try using K=3
 # Yep seems to be affected by the label switching problem
 df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
-samples <- gibbs_collapsed_cpp_wrapper(df_3, 10000, K=3)
+samples <- gibbs_collapsed_cpp_wrapper(df_3, 50000, K=3)
 plot_gibbs(samples)
 
-##### TODO:
-#  - Get working with multiple clusters
-#  - Extract Bernoulli parameters
-#  - Try getting it working with redundant features
-#  - Dirichlet process
