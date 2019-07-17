@@ -1,3 +1,7 @@
+// [[Rcpp::depends(RcppArmadillo)]]
+
+#include <RcppArmadillo.h>
+#include <RcppArmadilloExtensions/sample.h>
 #include <Rcpp.h>
 using namespace Rcpp;
 
@@ -13,20 +17,16 @@ using namespace Rcpp;
 
 // [[Rcpp::export]]
 NumericVector timesTwo(NumericVector x) {
-    std::vector<double> probs(3);
-    probs[0] = 0.1;
-    probs[1] = 0.2;
-    probs[2] = 0.7;
-
-    NumericVector probs2(3);
-    probs2[0] = 0.1;
-    probs2[1] = 0.2;
-    probs2[2] = 0.7;
-
-    IntegerVector ans(3);
-
-    rmultinom(1, probs.begin(), 3, ans.begin());
-    Rcout << ans << "\n";
+  
+    arma::uvec foo = arma::linspace<arma::uvec>(0, 4, 5);
+    arma::mat bar = arma::randn<arma::mat>(5, 2);
+    Rcout << "foo: " << foo << "\tsize: " << arma::size(foo) << "\n";
+    Rcout << "bar: " << bar << "\tsize: " << arma::size(bar) << "\n";
+    Rcout << "bar[foo]: " << bar.elem(foo) << "\tsize: " << arma::size(bar.elem(foo)) << "\n";
+    
+    foo.shed_row(3);
+    Rcout << "foo: " << foo << "\tsize: " << arma::size(foo) << "\n";
+    
   return x * 2;
 }
 

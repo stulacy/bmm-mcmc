@@ -48,13 +48,13 @@ gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, verbo
             allocations[j, i] <- sample(1:k, 1, prob=probs)
         }
     }
-    allocations
+    list(z=allocations)
 }
 
-gibbs_collapsed_cpp_wrapper <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, verbose=FALSE) {
-    initial_K <- sample(1:K, nrow(df), replace=T)
+gibbs_collapsed_cpp_wrapper <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
+    initial_K <- t(rmultinom(nrow(df), 1, rep(1/K, K)))
     collapsed_gibbs_cpp(df, initial_K,
-                        nsamples, K, alpha, beta, gamma, verbose)
+                        nsamples, K, alpha, beta, gamma, debug)
 }
 
 gibbs_full_cpp_wrapper <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5, 
@@ -68,24 +68,24 @@ gibbs_full_cpp_wrapper <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0
               nsamples, K, alpha, beta, gamma, debug)
 }
 
-plot_gibbs_collapsed <- function(samples) {
-    K <- length(unique(samples[1, ]))
-    nsamples <- nrow(samples)
-    nobs <- ncol(samples)
-    foo <- data.frame(t(apply(samples, 1, function(row) {
-                              sapply(1:K, function(x) sum(row == x))
-    })))
-    colnames(foo) <- paste0("Cluster", seq(K))
-    foo$step <- 1:nsamples
-
-    foo %>%
-        gather(cluster, num, -step) %>%
-        mutate(prop = num/nobs) %>%
-        ggplot(aes(x=step, y=prop, colour=cluster)) +
+plot_gibbs_collapsed <- function(obj) {
+    z <- obj$z
+    N <- dim(z)[1]
+    K <- dim(z)[2]
+    S <- dim(z)[3]
+    dimnames(z) <- list('observation'=1:N, 'cluster'=1:K, 'sample'=1:S)
+    z_long <- as.data.frame.table(z, responseName="value")
+    
+    z_long %>% 
+        filter(sample != 1) %>%
+        group_by(sample, cluster) %>%
+        summarise(n = sum(value)) %>%
+        mutate(prop = n / sum(n)) %>%
+        ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
             geom_line(alpha=0.5) +
-            scale_colour_discrete("") +
-            labs(x="Step number", y="Proportion") +
-            theme_bw()
+            theme_bw() +
+            labs(x="Sample", y="Proportion in cluster") +
+            scale_colour_discrete("Cluster")
 }
 
 plot_gibbs_complete <- function(obj) {
@@ -140,15 +140,18 @@ plot_gibbs_complete <- function(obj) {
 # Ok this has seemed to work on an easy dataset with 100 observations
 # and 2 well separated classes
 df <- readRDS("data/K2_N100_P5_clean.rds")
-samples_R <- gibbs_collapsed(df, 1000, K=2)
-plot_gibbs(samples_R)
-samples_cpp <- gibbs_collapsed_cpp_wrapper(df, 1000, K=2, verbose = FALSE)
-plot_gibbs(samples_cpp)
+samples_R <- gibbs_collapsed(df, 100, K=2)
+plot_gibbs_collapsed(samples_R)
+
+set.seed(12)
+samples_cpp <- gibbs_collapsed_cpp_wrapper(df[1:5, ], 3, K=2, debug = TRUE)
+plot_gibbs_collapsed(samples_cpp)
+samples_cpp$theta
 
 # What about on the same dataset with 1 thousand observations?
 df_2 <- readRDS("data/K2_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_2, 1000, K=2)
-plot_gibbs(samples)
+plot_gibbs_collapsed(samples)
 
 # Ok so seems to be fine with the number of observations, indeed it found
 # N=1000 much easier than N=100
@@ -158,7 +161,7 @@ plot_gibbs(samples)
 # Oh it does seem to have worked now have separated clusters more
 df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_3, 10000, K=3)
-plot_gibbs(samples)
+plot_gibbs_collapsed(samples)
 
 # Testing full Gibbs sampling and can see that like with the Collapsed Gibbs,
 # it works fine in the situation with K=2, N=1000.
