@@ -3,6 +3,7 @@
 # Then will buildup to random K using Dirichlet prior
 # Then will finalise with infinite mixture using Dirichlet Process prior
 library(tidyverse)
+library(gridExtra)
 
 gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, verbose=FALSE) {
 
@@ -56,8 +57,18 @@ gibbs_collapsed_cpp_wrapper <- function(df, nsamples, K, alpha=1, beta=0.5, gamm
                         nsamples, K, alpha, beta, gamma, verbose)
 }
 
+gibbs_full_cpp_wrapper <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5, 
+                                   debug=FALSE) {
+    initial_pi <- runif(K)
+    initial_pi <- exp(initial_pi) 
+    initial_pi <- initial_pi / sum(initial_pi) 
+    
+    initial_theta <- matrix(runif(K*ncol(data)), ncol=ncol(data), nrow=K)
+    gibbs_cpp(data, initial_pi, initial_theta,
+              nsamples, K, alpha, beta, gamma, debug)
+}
 
-plot_gibbs <- function(samples) {
+plot_gibbs_collapsed <- function(samples) {
     K <- length(unique(samples[1, ]))
     nsamples <- nrow(samples)
     nobs <- ncol(samples)
@@ -75,6 +86,55 @@ plot_gibbs <- function(samples) {
             scale_colour_discrete("") +
             labs(x="Step number", y="Proportion") +
             theme_bw()
+}
+
+plot_gibbs_complete <- function(obj) {
+    # Get all variables in long format
+    theta <- obj$theta
+    K <- dim(theta)[1]
+    P <- dim(theta)[2]
+    S <- dim(theta)[3]
+    dimnames(theta) <- list('cluster'=1:K, 'variable'=1:P, 'sample'=1:S)
+    theta_long <- as.data.frame.table(theta, responseName = "value")
+    
+    z <- obj$z
+    N <- dim(z)[1]
+    K <- dim(z)[2]
+    S <- dim(z)[3]
+    dimnames(z) <- list('observation'=1:N, 'cluster'=1:K, 'sample'=1:S)
+    z_long <- as.data.frame.table(z, responseName="value")
+    
+    pi <- obj$pi
+    S <- dim(pi)[1]
+    K <- dim(pi)[2]
+    dimnames(pi) <- list('sample'=1:S, 'cluster'=1:K)
+    pi_long <- as.data.frame.table(pi, responseName="value")
+    
+    plt_pi <- pi_long %>% 
+        ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
+            geom_line(alpha=0.5) +
+            theme_bw() +
+            labs(x="Sample", y="Pi") +
+            scale_colour_discrete("Cluster")
+    plt_z <- z_long %>% 
+        filter(sample != 1) %>%
+        group_by(sample, cluster) %>%
+        summarise(n = sum(value)) %>%
+        mutate(prop = n / sum(n)) %>%
+        ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
+            geom_line(alpha=0.5) +
+            theme_bw() +
+            labs(x="Sample", y="Proportion in cluster") +
+            scale_colour_discrete("Cluster")
+    plt_theta <- theta_long %>% 
+        ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
+            geom_line(alpha=0.5) +
+            facet_wrap(~variable) +
+            theme_bw() +
+            labs(x="Sample", y="Theta") +
+            scale_colour_discrete("Cluster")
+    grid.arrange(plt_z, plt_pi, plt_theta, nrow=3,
+                 heights=c(1, 1, 2))
 }
 
 # Ok this has seemed to work on an easy dataset with 100 observations
@@ -99,4 +159,7 @@ plot_gibbs(samples)
 df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_3, 50000, K=3)
 plot_gibbs(samples)
+
+foo <- gibbs_full_cpp_wrapper(df_2, 1000, 2, debug=FALSE) 
+plot_gibbs_complete(foo)
 
