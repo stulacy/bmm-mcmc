@@ -155,11 +155,19 @@ plot_gibbs(samples)
 
 # So is it the number of clusters that's the problem?
 # Let's try using K=3
-# Yep seems to be affected by the label switching problem
+# Oh it does seem to have worked now have separated clusters more
 df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
-samples <- gibbs_collapsed_cpp_wrapper(df_3, 50000, K=3)
+samples <- gibbs_collapsed_cpp_wrapper(df_3, 10000, K=3)
 plot_gibbs(samples)
 
+# Testing full Gibbs sampling and can see that like with the Collapsed Gibbs,
+# it works fine in the situation with K=2, N=1000.
+# And furthermore can easily obtain thetas, which must be obtainable from
+# collapsed gibbs sampler but I just don't know how.
 foo <- gibbs_full_cpp_wrapper(df_2, 1000, 2, debug=FALSE) 
 plot_gibbs_complete(foo)
 
+# Can it handle K=3 however? 
+# Yes it can rather easily
+foo <- gibbs_full_cpp_wrapper(df_3, 10000, 3) 
+plot_gibbs_complete(foo)

@@ -8,7 +8,7 @@ theta_actual <- matrix(c(0.7, 0.8, 0.2, 0.1, 0.1,
                          0.3, 0.5, 0.9, 0.8, 0.6,
                          0.1, 0.2, 0.5, 0.4, 0.9),
                        nrow=3, ncol=5, byrow = T)
-cluster_ratios <- c(0.4, 0.3, 0.3)
+cluster_ratios <- c(0.6, 0.2, 0.2)
 
 mat_list <- lapply(seq_along(cluster_ratios), function(i) {
     n <- round(N * cluster_ratios[i])
