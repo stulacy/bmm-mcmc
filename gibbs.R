@@ -48,118 +48,131 @@ gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, verbo
             allocations[j, i] <- sample(1:k, 1, prob=probs)
         }
     }
-    allocations
+    list(z=allocations)
 }
 
-gibbs_collapsed_cpp_wrapper <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, verbose=FALSE) {
-    initial_K <- sample(1:K, nrow(df), replace=T)
+gibbs_collapsed_cpp_wrapper <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
+    initial_K <- t(rmultinom(nrow(df), 1, rep(1/K, K)))
     collapsed_gibbs_cpp(df, initial_K,
-                        nsamples, K, alpha, beta, gamma, verbose)
+                        nsamples, K, alpha, beta, gamma, debug)
 }
 
-gibbs_full_cpp_wrapper <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5, 
+gibbs_full_cpp_wrapper <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
                                    debug=FALSE) {
     initial_pi <- runif(K)
-    initial_pi <- exp(initial_pi) 
-    initial_pi <- initial_pi / sum(initial_pi) 
-    
+    initial_pi <- exp(initial_pi)
+    initial_pi <- initial_pi / sum(initial_pi)
+
     initial_theta <- matrix(runif(K*ncol(data)), ncol=ncol(data), nrow=K)
     gibbs_cpp(data, initial_pi, initial_theta,
               nsamples, K, alpha, beta, gamma, debug)
 }
 
-plot_gibbs_collapsed <- function(samples) {
-    K <- length(unique(samples[1, ]))
-    nsamples <- nrow(samples)
-    nobs <- ncol(samples)
-    foo <- data.frame(t(apply(samples, 1, function(row) {
-                              sapply(1:K, function(x) sum(row == x))
-    })))
-    colnames(foo) <- paste0("Cluster", seq(K))
-    foo$step <- 1:nsamples
+plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=TRUE, heights=NULL) {
 
-    foo %>%
-        gather(cluster, num, -step) %>%
-        mutate(prop = num/nobs) %>%
-        ggplot(aes(x=step, y=prop, colour=cluster)) +
-            geom_line(alpha=0.5) +
-            scale_colour_discrete("") +
-            labs(x="Step number", y="Proportion") +
-            theme_bw()
-}
+    plts <- list()
 
-plot_gibbs_complete <- function(obj) {
-    # Get all variables in long format
-    theta <- obj$theta
-    K <- dim(theta)[1]
-    P <- dim(theta)[2]
-    S <- dim(theta)[3]
-    dimnames(theta) <- list('cluster'=1:K, 'variable'=1:P, 'sample'=1:S)
-    theta_long <- as.data.frame.table(theta, responseName = "value")
-    
-    z <- obj$z
-    N <- dim(z)[1]
-    K <- dim(z)[2]
-    S <- dim(z)[3]
-    dimnames(z) <- list('observation'=1:N, 'cluster'=1:K, 'sample'=1:S)
-    z_long <- as.data.frame.table(z, responseName="value")
-    
-    pi <- obj$pi
-    S <- dim(pi)[1]
-    K <- dim(pi)[2]
-    dimnames(pi) <- list('sample'=1:S, 'cluster'=1:K)
-    pi_long <- as.data.frame.table(pi, responseName="value")
-    
-    plt_pi <- pi_long %>% 
-        ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
-            geom_line(alpha=0.5) +
-            theme_bw() +
-            labs(x="Sample", y="Pi") +
-            scale_colour_discrete("Cluster")
-    plt_z <- z_long %>% 
-        filter(sample != 1) %>%
-        group_by(sample, cluster) %>%
-        summarise(n = sum(value)) %>%
-        mutate(prop = n / sum(n)) %>%
-        ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
-            geom_line(alpha=0.5) +
-            theme_bw() +
-            labs(x="Sample", y="Proportion in cluster") +
-            scale_colour_discrete("Cluster")
-    plt_theta <- theta_long %>% 
-        ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
-            geom_line(alpha=0.5) +
-            facet_wrap(~variable) +
-            theme_bw() +
-            labs(x="Sample", y="Theta") +
-            scale_colour_discrete("Cluster")
-    grid.arrange(plt_z, plt_pi, plt_theta, nrow=3,
-                 heights=c(1, 1, 2))
+    if (pi) {
+        pi <- obj$pi
+        S <- dim(pi)[1]
+        K <- dim(pi)[2]
+        dimnames(pi) <- list('sample'=1:S, 'cluster'=1:K)
+        pi_long <- as.data.frame.table(pi, responseName="value")
+
+        plt_pi <- pi_long %>%
+            ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
+                geom_line(alpha=0.5) +
+                theme_bw() +
+                labs(x="Sample", y="Pi") +
+                scale_colour_discrete("Cluster")
+        plts[[length(plts) + 1]] <- plt_pi
+    }
+
+    if (z) {
+        z <- obj$z
+        N <- dim(z)[1]
+        K <- dim(z)[2]
+        S <- dim(z)[3]
+        dimnames(z) <- list('observation'=1:N, 'cluster'=1:K, 'sample'=1:S)
+        z_long <- as.data.frame.table(z, responseName="value")
+
+        plt_z <- z_long %>%
+            filter(sample != 1) %>%
+            group_by(sample, cluster) %>%
+            summarise(n = sum(value)) %>%
+            mutate(prop = n / sum(n)) %>%
+            ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
+                geom_line(alpha=0.5) +
+                theme_bw() +
+                labs(x="Sample", y="Proportion in cluster") +
+                scale_colour_discrete("Cluster")
+        plts[[length(plts) + 1]] <- plt_z
+    }
+
+    if (theta) {
+        theta <- obj$theta
+        K <- dim(theta)[1]
+        P <- dim(theta)[2]
+        S <- dim(theta)[3]
+        dimnames(theta) <- list('cluster'=1:K, 'variable'=1:P, 'sample'=1:S)
+        theta_long <- as.data.frame.table(theta, responseName = "value")
+
+        plt_theta <- theta_long %>%
+            filter(sample != 1) %>%
+            ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
+                geom_line(alpha=0.5) +
+                facet_wrap(~variable) +
+                theme_bw() +
+                labs(x="Sample", y="Theta") +
+                scale_colour_discrete("Cluster")
+        plts[[length(plts) + 1]] <- plt_theta
+    }
+    grid.arrange(arrangeGrob(grobs=plts, ncol=1, heights=heights))
 }
 
 # Ok this has seemed to work on an easy dataset with 100 observations
 # and 2 well separated classes
 df <- readRDS("data/K2_N100_P5_clean.rds")
-samples_R <- gibbs_collapsed(df, 1000, K=2)
-plot_gibbs(samples_R)
-samples_cpp <- gibbs_collapsed_cpp_wrapper(df, 1000, K=2, verbose = FALSE)
-plot_gibbs(samples_cpp)
+#samples_R <- gibbs_collapsed(df, 100, K=2)
+#plot_gibbs(samples_R)
+
+# Form dataset that know what the first values should be
+# N = 4, P = 3, K =2
+test_df <- matrix(c(0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0), nrow=4, ncol=3, byrow=T)
+test_df
+initial_K <- matrix(c(1, 0, 0, 1, 1, 0, 0, 1), nrow=4, ncol=2, byrow=T)
+initial_K
+
+collapsed_gibbs_cpp(test_df, initial_K, 2, 2, 1, 0.5, 0.5, TRUE)
+
+set.seed(12)
+samples_cpp <- gibbs_collapsed_cpp_wrapper(df[1:7, ], 2, K=2, debug=TRUE)
+
+plot_gibbs(samples_cpp, pi=F)
 
 # What about on the same dataset with 1 thousand observations?
 df_2 <- readRDS("data/K2_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_2, 1000, K=2)
-plot_gibbs(samples)
+plot_gibbs(samples, pi=F)
 
 # Ok so seems to be fine with the number of observations, indeed it found
 # N=1000 much easier than N=100
 
 # So is it the number of clusters that's the problem?
 # Let's try using K=3
-# Yep seems to be affected by the label switching problem
+# Oh it does seem to have worked now have separated clusters more
 df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
-samples <- gibbs_collapsed_cpp_wrapper(df_3, 50000, K=3)
-plot_gibbs(samples)
+samples <- gibbs_collapsed_cpp_wrapper(df_3, 1000, K=3)
+plot_gibbs(samples, pi=F)
 
-foo <- gibbs_full_cpp_wrapper(df_2, 1000, 2, debug=FALSE) 
-plot_gibbs_complete(foo)
+# Testing full Gibbs sampling and can see that like with the Collapsed Gibbs,
+# it works fine in the situation with K=2, N=1000.
+# And furthermore can easily obtain thetas, which must be obtainable from
+# collapsed gibbs sampler but I just don't know how.
+foo <- gibbs_full_cpp_wrapper(df_2, 1000, 2, debug=FALSE)
+plot_gibbs(foo)
 
+# Can it handle K=3 however?
+# Yes it can rather easily
+foo <- gibbs_full_cpp_wrapper(df_3, 1000, 3)
+plot_gibbs(foo)

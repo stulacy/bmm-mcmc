@@ -1,5 +1,2 @@
-  - Extract Bernoulli parameters
-  - Try full Gibbs and see if that extracts parameters
-  - Get working with multiple clusters
-  - Try getting it working with redundant features
   - Dirichlet process
+  - Try getting it working with redundant features
