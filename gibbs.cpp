@@ -5,9 +5,9 @@
 
 using namespace Rcpp;
 
-// [[Rcpp::export]]
 // Taken from https://www.mjdenny.com/blog.html
 // draws from dirichlet using relationship with gamma(alpha, 1)
+// [[Rcpp::export]]
 arma::vec rdirichlet_cpp(arma::vec alpha_m) {
     int distribution_size = alpha_m.n_elem;
     // each row will be a draw from a Dirichlet
@@ -139,7 +139,7 @@ List gibbs_cpp(IntegerMatrix df,
         }
         
         for (int k = 0; k < K; k++) {
-            dirich_params(k) = alpha / K + ck[k];
+            dirich_params(k) = (alpha / K) + ck[k];
         }
         if (debug) Rcout << "dirich params: " << dirich_params << "\n";
         
@@ -155,7 +155,7 @@ List gibbs_cpp(IntegerMatrix df,
                     Rcout << "k: " << k << "\td: " << d << "\t";
                     Rcout << "Vkd: " << Vkd(k, d) << "\tck: " << ck[k] << "\t";
                 }
-                theta_row(k, d) = rbeta(1, beta + Vkd(k, d), gamma + ck[k] - Vkd(k, d))(0);
+                theta_row(k, d) = R::rbeta(beta + Vkd(k, d), gamma + ck[k] - Vkd(k, d));
             }
         }
         if (debug) Rcout << "Theta: " << theta_row << "\n";
@@ -166,7 +166,6 @@ List gibbs_cpp(IntegerMatrix df,
     ret["pi"] = pi_sampled;
     ret["z"] = z_sampled;
     ret["theta"] = theta_sampled;
-    
     return(ret);
 }
 
