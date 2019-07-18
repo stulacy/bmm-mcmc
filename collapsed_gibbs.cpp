@@ -14,28 +14,6 @@ using namespace Rcpp;
 //   http://gallery.rcpp.org/
 //
 
-int calc_sumx(arma::Mat<int> data, std::vector<int> ck, int d, int curr_sample) {
-    int sum_x = 0;
-    for (int i : ck) {
-        if (i == curr_sample) continue;
-        sum_x += data(i, d);
-    }
-    return sum_x;
-}
-
-std::vector<int> get_ck(IntegerMatrix labels, int N, int step, int obs, int k) {
-    std::vector<int> out;
-    for (int i = 0; i < N; ++i) {
-        if (i == obs) {
-            continue;
-        }
-        if (labels(step-1, i) == k) {
-            out.push_back(i);
-        }
-    }
-    return out;
-}
-
 // Collapsed Gibbs sampler
 // For each i in 1:N
 //  Sample z_i given (theta, z_(-i), x)
@@ -61,7 +39,7 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                          double beta,
                          double gamma,
                          bool debug) {
-    
+
     arma::Mat<int> df_arma = as<arma::Mat<int>>(df);
 
     int N = df_arma.n_rows;
@@ -71,100 +49,105 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
     arma::Cube<int> allocations(N, K, nsamples);
     allocations.slice(0) = as<arma::Mat<int>>(initialK);
     arma::cube thetas(K, P, nsamples);
-    
-    int N_nk, Nk, sum_x, dpoint;
-    std::vector<int> this_ck;
-    double frac, num_1, num_2, loglh, denom, contrib, cum_probs, dummy;
+
+    arma::uvec ck_inds(N);
+    arma::Mat<int> Ck_(N-1, K);
+    arma::Mat<int> this_df(N-1, P);
+    arma::vec N_nk(K);
+    arma::mat sum_k_d(P, K);
+    arma::mat inner1(P, K);
+    arma::mat inner2(P, K);
+    arma::vec left_term(K);
+    arma::mat numerator(P, K);
+    arma::vec denominator(K);
+    arma::vec frac(K);
+    arma::vec probs(K);
+    arma::mat this_theta(K, P);
+    arma::vec Nk(K);
+
+    //arma::colvec N_nk;
     for (int j=1; j < nsamples; ++j) {
         Rcpp::Rcout << "Sample: " << j+1 << "\n";
         // Set params
         for (int i=0; i < N; ++i) {
-            NumericVector probs(K);
-            cum_probs = 0;
-            arma::uvec ck_inds = arma::linspace<arma::uvec>(0, N-1, N);
+            if (debug) Rcpp::Rcout << "\nObservation: " << i << "\n~~~~~~~~~~~~~~\n\n";
+            ck_inds = arma::linspace<arma::uvec>(0, N-1, N);
             ck_inds.shed_row(i);
-            Rcout << "ck inds size: " << arma::size(ck_inds) << "\n";
-            
-            for (int k=0; k < K; ++k) {
-                arma::Col<int> Ck = allocations.slice(j-1).rows(ck_inds).col(k);
-                Rcout << "Ck size: " << arma::size(Ck) << "\n";
-                Nk = arma::sum(Ck);
-                N_nk = Nk - allocations(i, k, j-1);
-                if (debug) Rcout << "Nk: " << Nk << "\tN_nk: " << N_nk << "\n";
-
-                // First half
-                frac = log(N_nk + alpha/K) - log(N - 1 + alpha);
-                if (debug) Rcpp::Rcout << "Frac: " << frac << "\n";
-
-                // Second half is loglh
-                loglh = 0;
-                
-                // TODO Correctly remove current data point from Ck
-                // TODO Vectorise this
-                for (int d=0; d < P; ++d) {
-                    // Ck = (N,)
-                    // data[, d] = (N)
-                    
-                    
-                    
-                    arma::Col<int> out = df_arma.col(d).t() * Ck;
-                    sum_x = out(0,0);
-                    dpoint = df_arma(i,d);
-                    if (debug) Rcout << "d: " << d << "\tsum_x: " << sum_x << "\tNk: " << Nk << "\n";
-                    thetas(k, d, j) = sum_x / Nk;
-
-                    num_1 = dpoint * log(beta + sum_x);
-                    num_2 = (1-dpoint) * log(gamma + N_nk - sum_x);
-                    denom = log(beta + gamma + N_nk);
-                    contrib = num_1 + num_2 - denom;
-                    
-                    if (debug) Rcout << "num_1: " << num_1;
-                    if (debug) Rcout << "\tnum_2: " << num_2;
-                    if (debug) Rcout << "\tdenom: " << denom;
-                    if (debug) Rcout << "\tcontrib: " << contrib;
-                    if (debug) Rcout << "\tcurr loglh: " << loglh << "\n";
-                    
-                    
-                    loglh += contrib;
-                }
-                if (debug) Rcpp::Rcout << "loglh: " << loglh << "\n";
-                dummy = exp(frac+loglh);
-                probs(k) = dummy;
-                cum_probs += dummy;
-            }
+            Ck_ = allocations.slice(j-1).rows(ck_inds);
+            this_df = df_arma.rows(ck_inds);
+            N_nk = arma::conv_to<arma::vec>::from(arma::sum(Ck_, 0));
             if (debug) {
-                Rcpp::Rcout << "raw probs: ";
-                for (int k=0; k < K; ++k) {
-                     Rcpp::Rcout << probs(k) << " | ";
-                }
-                Rcpp::Rcout << "\n";
-            }
-            for (int p = 0; p < K; ++p) {
-                probs(p) /= cum_probs;
-            }
-            if (debug) {
-                Rcpp::Rcout << "normalised probs: ";
-                for (int k=0; k < K; ++k) {
-                     Rcpp::Rcout << probs(k) << " | ";
-                }
-                Rcpp::Rcout << "\n";
+                Rcout << "Ck_ " << Ck_ << "\n";
+                Rcout << "Ck_ size: " << arma::size(Ck_) << "\n";
+                Rcout << "N_nk " << N_nk << "\n";
+                Rcout << "N_nk size " << arma::size(N_nk) << "\n";
+                Rcout << "df size: " << arma::size(this_df) << "\n";
             }
 
+            sum_k_d = arma::conv_to<arma::mat>::from(this_df.t() * Ck_);
+            if (debug) {
+                Rcout << "sum_k_d: " << sum_k_d << "\n";
+                Rcout << "size: sum_k_d " << arma::size(sum_k_d) << "\n";
+            }
+
+            // ***** LEFT HAND SIDE of density *****
+            left_term = arma::log((N_nk + (alpha / K)) / (N - 1 + alpha));
+            if (debug) Rcout << "left_term: " << left_term << "\tsize: " << arma::size(left_term) << "\n";
+
+            // ***** RIGHT HAND SIDE of density *****
+            // Calculate inner parts of numerator, both returning D x K matrices
+            inner1 = arma::log(beta + sum_k_d);
+
+            // Now transform sum_k_d so can use it for right hand inner sum
+            sum_k_d.each_row() -= N_nk.t();
+            inner2 = arma::log(gamma - sum_k_d);
+            if (debug) Rcout << "sum_k_d after transform: " << sum_k_d << "\tsize: " << arma::size(sum_k_d) << "\n";
+            if (debug) Rcout << "inner1: " << inner1 << "\tsize: " << arma::size(inner1) << "\n";
+            if (debug) Rcout << "inner2: " << inner2 << "\tsize: " << arma::size(inner2) << "\n";
+
+            // Add inner sides up and divide by denominator to get DxK for this individual
+            inner1.each_col() %= arma::conv_to<arma::vec>::from(df_arma.row(i).t());
+            inner2.each_col() %= arma::conv_to<arma::vec>::from(1-df_arma.row(i).t());
+            if (debug) Rcout << "inner1 multiplied by data: " << inner1 << "\tsize: " << arma::size(inner1) << "\n";
+            if (debug) Rcout << "inner2 multiplied by data: " << inner2 << "\tsize: " << arma::size(inner2) << "\n";
+
+            // TODO DO THIS RHS IN ONE STEP
+            numerator = inner1 + inner2;
+            if (debug) Rcout << "numerator: " << numerator << "\tsize: " << arma::size(numerator) << "\n";
+
+            // Denominator is also K length vector due to N_nk
+            denominator = arma::log(beta + gamma + N_nk);
+            if (debug) Rcout << "denominator: " << denominator << "\tsize: " << arma::size(denominator) << "\n";
+
+            // Element wise division to obtain K length vector for right-hand side of density
+            numerator.each_row() -= denominator.t();
+            if (debug) Rcout << "numerator: " << numerator << "\tsize: " << arma::size(numerator) << "\n";
+
+            // Sum over D and add to left term to get raw probabilities for this observation
+            probs = arma::exp(left_term + arma::sum(numerator, 0).t());
+            if (debug) Rcout << "Raw probs: " << probs << "\tsize: " << arma::size(probs) << "\n";
+            probs /= arma::sum(probs);
+            if (debug) Rcout << "normalised probs: " << probs << "\tsize: " << arma::size(probs) << "\n";
+
+            // Now pull out the Z assignments
             IntegerVector this_z(K);
-            R::rmultinom(1, probs.begin(), K, this_z.begin());
+            R::rmultinom(1, probs.memptr(), K, this_z.begin());
             if (debug) Rcout << "this_z: " << this_z << "\n";
-            // TODO Change Col to Row here and can remove transpose?
-            allocations.slice(j).row(i) = as<arma::Col<int>>(this_z).t();
-            //for (int k=0; k < K; ++k) {
-            //    if (this_z(k) == 1) {
-            //        if (debug) Rcout << "Adding " << i << " to Ck for k = " << k << "\n";
-            //        Ck[j][k].push_back(i);
-            //    }
-            //}
+            allocations.slice(j).row(i) = as<arma::Row<int>>(this_z);
         }
+        // Calculate thetas here to be returned
+        this_theta = (arma::conv_to<arma::mat>::from(df_arma.t() * allocations.slice(j))).t();
+        if (debug) Rcout << "this_theta: " << this_theta << "\tsize: " << arma::size(this_theta) << "\n";
+        Nk = arma::conv_to<arma::vec>::from(arma::sum(allocations.slice(j), 0));
+        if (debug) Rcout << "Nk: " << Nk << "\tsize: " << arma::size(Nk) << "\n";
+
+        this_theta.each_col() /= Nk;
+        this_theta.replace(arma::datum::nan, 0);
+        if (debug) Rcout << "this_theta: " << this_theta << "\tsize: " << arma::size(this_theta) << "\n";
+
+        thetas.slice(j) = this_theta;
     }
-    
-    // Now calculate thetas
+
     List ret;
     ret["z"] = allocations;
     ret["theta"] = thetas;

@@ -1,4 +1,2 @@
-  - Obtain thetas from sampled Zs
-  - Vectorise collapsed Gibbs
   - Dirichlet process
   - Try getting it working with redundant features

@@ -12,7 +12,7 @@ arma::vec rdirichlet_cpp(arma::vec alpha_m) {
     int distribution_size = alpha_m.n_elem;
     // each row will be a draw from a Dirichlet
     arma::vec distribution = arma::zeros(distribution_size);
-    
+
     double sum_term = 0;
     // loop through the distribution and draw Gamma variables
     for (int j = 0; j < distribution_size; ++j) {
@@ -87,7 +87,7 @@ List gibbs_cpp(IntegerMatrix df,
                 s[k] = dummy;
                 cum_probs += dummy;
             }
-            
+
             if (debug) {
                 Rcout << "Raw probs:\n";
                 for (int p = 0; p < K; ++p) {
@@ -100,7 +100,7 @@ List gibbs_cpp(IntegerMatrix df,
             for (int p = 0; p < K; ++p) {
                 s[p] /= cum_probs;
             }
-            
+
             if (debug) {
                 Rcout << "Normalised probs:\n";
                 for (int p = 0; p < K; ++p) {
@@ -137,17 +137,17 @@ List gibbs_cpp(IntegerMatrix df,
                 }
             }
         }
-        
+
         for (int k = 0; k < K; k++) {
             dirich_params(k) = (alpha / K) + ck[k];
         }
         if (debug) Rcout << "dirich params: " << dirich_params << "\n";
-        
+
         // Generate pi(t) from Dirichlet(α1+u1,...,αK+uK)
         this_pi = wrap(rdirichlet_cpp(dirich_params));
         if (debug) Rcout << "this_pi: " << this_pi << "\n";
         pi_sampled(j, _) = this_pi;
-        
+
         // Generate theta(t)kd from Beta(γkd+vkd,δkd+uk−vkd)(for allk,d)
         for (int k = 0; k < K; ++k) {
             for (int d = 0; d < P; ++d) {
@@ -161,7 +161,7 @@ List gibbs_cpp(IntegerMatrix df,
         if (debug) Rcout << "Theta: " << theta_row << "\n";
         theta_sampled.slice(j) = as<arma::mat>(theta_row);
     }
-    
+
     List ret;
     ret["pi"] = pi_sampled;
     ret["z"] = z_sampled;
