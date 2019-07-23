@@ -1,2 +1,3 @@
   - Dirichlet process
   - Try getting it working with redundant features
+  - Identify how to predict membership for new observation
