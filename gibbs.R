@@ -9,55 +9,8 @@ gibbs_dp_cpp_wrapper <- function(df, nsamples, alpha=1, beta=0.5, gamma=0.5, deb
     collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, debug)
 }
 
-
-gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, verbose=FALSE) {
-
-    N <- nrow(df)
-    P <- ncol(df)
-
-    # Random sample for first row
-    allocations <- matrix(0, nrow=nsamples, ncol=N)
-    allocations[1, ] <- sample(1:K, N, replace=T)
-    for (j in 2:nsamples) {
-        cat(sprintf("\nSample: %d\n ", j))
-        # Set params
-        for (i in 1:N) {
-            probs <- rep(0, K)
-            for (k in 1:K) {
-                # All points in current cluster except current data point. HOW DOES THIS DIFFER FROM N_nk?
-                ck <- allocations[j-1, -i] == k
-                N_nk <- sum(ck)
-
-                frac <- log(N_nk + alpha/K) - log(N - 1 + alpha)
-                if (verbose) cat(sprintf("Frac: %f\n", frac))
-
-                loglh <- 0
-                for (d in 1:P) {
-                    sum_x <- sum(df[-i, ][ck, d])
-
-                    num_1 <- df[i,d] * log(beta + sum_x)
-                    num_2 <- (1-df[i,d]) * log(gamma + N_nk - sum_x)
-                    denom <- log(beta + gamma + N_nk)
-                    contrib <- num_1 + num_2 - denom
-                    loglh <- loglh + contrib
-                }
-                if (verbose) cat(sprintf("loglh: %f\n", loglh))
-                probs[k] <- frac + loglh
-            }
-            if (verbose) cat(sprintf("raw probs: %f\n", probs))
-            probs <- exp(probs)
-            sum_ <- sum(probs)
-            probs <- probs / sum_
-            if (verbose) cat(sprintf("normalised probs: %f\n", probs))
-            #cat(paste0("Probs: ", probs, "\n"))
-            allocations[j, i] <- sample(1:k, 1, prob=probs)
-        }
-    }
-    list(z=allocations)
-}
-
 gibbs_collapsed_cpp_wrapper <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
-    initial_K <- t(rmultinom(nrow(df), 1, rep(1/K, K)))
+    initial_K <- sample(1:K, nrow(df), replace=T)-1
     collapsed_gibbs_cpp(df, initial_K,
                         nsamples, K, alpha, beta, gamma, debug)
 }
@@ -95,16 +48,18 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=TRUE, heights=NULL) {
 
     if (z) {
         z <- obj$z
-        N <- dim(z)[1]
-        K <- dim(z)[2]
-        S <- dim(z)[3]
-        dimnames(z) <- list('observation'=1:N, 'cluster'=1:K, 'sample'=1:S)
-        z_long <- as.data.frame.table(z, responseName="value")
+        S <- nrow(z)
+        N <- ncol(z)
+        dimnames(z) <- list('sample'=1:S, 'observation'=1:N)
+        z_long <- as.data.frame.table(z, responseName="cluster")
+
+        # Remember clusters are zero indexed in C++!
+        z_long <- z_long %>% filter(sample != 1) %>% mutate(cluster = cluster + 1)
 
         plt_z <- z_long %>%
             filter(sample != 1) %>%
             group_by(sample, cluster) %>%
-            summarise(n = sum(value)) %>%
+            summarise(n = n()) %>%
             mutate(prop = n / sum(n)) %>%
             ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
                 geom_line() +
@@ -235,7 +190,7 @@ df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_3, 1000, K=3)
 plot_gibbs(samples, pi=F)
 
-samples_dp3 <- gibbs_dp_cpp_wrapper(df_3, 10000)
+samples_dp3 <- gibbs_dp_cpp_wrapper(df_3, 1000)
 plot_gibbs_dp(samples_dp3, cluster_threshold = 0.15)
 
 # Testing full Gibbs sampling and can see that like with the Collapsed Gibbs,
