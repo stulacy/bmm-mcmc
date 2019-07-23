@@ -1,3 +1,4 @@
-  - Dirichlet process
-  - Try getting it working with redundant features
-  - Identify how to predict membership for new observation
+  - Fix issue with label switching in DP sampling
+  - Speed up collapsed Gibbs - try going back to non-vectorised method?
+  - Implement predictive distribution
+  - Incorporate redundant features into likelihood
