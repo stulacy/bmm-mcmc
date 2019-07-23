@@ -86,7 +86,7 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=TRUE, heights=NULL) {
 
         plt_pi <- pi_long %>%
             ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
-                geom_line(alpha=0.5) +
+                geom_line() +
                 theme_bw() +
                 labs(x="Sample", y="Pi") +
                 scale_colour_discrete("Cluster")
@@ -107,73 +107,9 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=TRUE, heights=NULL) {
             summarise(n = sum(value)) %>%
             mutate(prop = n / sum(n)) %>%
             ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
-                geom_line(alpha=0.5) +
+                geom_line() +
                 theme_bw() +
-                labs(x="Sample", y="Proportion in cluster") +
-                scale_colour_discrete("Cluster")
-        plts[[length(plts) + 1]] <- plt_z
-    }
-
-    if (theta) {
-        theta <- obj$theta
-        K <- dim(theta)[1]
-        P <- dim(theta)[2]
-        S <- dim(theta)[3]
-        dimnames(theta) <- list('cluster'=1:K, 'variable'=1:P, 'sample'=1:S)
-        theta_long <- as.data.frame.table(theta, responseName = "value")
-
-        plt_theta <- theta_long %>%
-            filter(sample != 1) %>%
-            ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
-                geom_line(alpha=0.5) +
-                facet_wrap(~variable) +
-                theme_bw() +
-                labs(x="Sample", y="Theta") +
-                scale_colour_discrete("Cluster")
-        plts[[length(plts) + 1]] <- plt_theta
-    }
-    grid.arrange(arrangeGrob(grobs=plts, ncol=1, heights=heights))
-}
-
-plot_gibbs_dp <- function(obj, theta=TRUE, z=TRUE, pi=TRUE, heights=NULL) {
-
-    plts <- list()
-
-    if (pi) {
-        pi <- obj$pi
-        S <- dim(pi)[1]
-        K <- dim(pi)[2]
-        dimnames(pi) <- list('sample'=1:S, 'cluster'=1:K)
-        pi_long <- as.data.frame.table(pi, responseName="value")
-
-        plt_pi <- pi_long %>%
-            ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
-                geom_line(alpha=0.5) +
-                theme_bw() +
-                labs(x="Sample", y="Pi") +
-                scale_colour_discrete("Cluster")
-        plts[[length(plts) + 1]] <- plt_pi
-    }
-
-    if (z) {
-        z <- obj$z
-        S <- nrow(z)
-        N <- ncol(z)
-        dimnames(z) <- list('sample'=1:S, 'observation'=1:N)
-        z_long <- as.data.frame.table(z, responseName="cluster")
-
-       z_long <- z_long %>% filter(sample != 1)
-
-        clusts <- unique(z_long$cluster)
-
-        plt_z <- z_long %>%
-            mutate(cluster = factor(cluster, levels=sort(clusts), labels=1:length(clusts))) %>%
-            group_by(sample, cluster) %>%
-            summarise(n = n()) %>%
-            mutate(prop = n / sum(n)) %>%
-            ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
-                geom_line(alpha=0.5) +
-                theme_bw() +
+                ylim(0, 1) +
                 labs(x="Sample", y="Proportion in cluster") +
                 scale_colour_discrete("Cluster", guide=F)
         plts[[length(plts) + 1]] <- plt_z
@@ -190,8 +126,65 @@ plot_gibbs_dp <- function(obj, theta=TRUE, z=TRUE, pi=TRUE, heights=NULL) {
         plt_theta <- theta_long %>%
             filter(sample != 1) %>%
             ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
-                geom_line(alpha=0.5) +
+                geom_line() +
                 facet_wrap(~variable) +
+                theme_bw() +
+                ylim(0, 1) +
+                labs(x="Sample", y="Theta") +
+                scale_colour_discrete("Cluster", guide=F)
+        plts[[length(plts) + 1]] <- plt_theta
+    }
+    grid.arrange(arrangeGrob(grobs=plts, ncol=1, heights=heights))
+}
+
+plot_gibbs_dp <- function(obj, theta=TRUE, heights=NULL, cluster_threshold=0.1) {
+
+    plts <- list()
+    z <- obj$z
+    S <- nrow(z)
+    N <- ncol(z)
+    dimnames(z) <- list('sample'=1:S, 'observation'=1:N)
+    z_long <- as.data.frame.table(z, responseName="cluster")
+
+    # Remember clusters are zero indexed in C++!
+    z_long <- z_long %>% filter(sample != 1) %>% mutate(cluster = cluster + 1)
+
+    clusts <- unique(z_long$cluster)
+
+    z_props <- z_long %>%
+        group_by(sample, cluster) %>%
+        summarise(n = n()) %>%
+        mutate(prop = n / sum(n))
+    plt_z <- z_props %>%
+        ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
+            geom_line() +
+            theme_bw() +
+            ylim(0, 1) +
+            labs(x="Sample", y="Proportion in cluster") +
+            scale_colour_discrete("Cluster", guide=F)
+    plts[[length(plts) + 1]] <- plt_z
+
+    # Calculate which clusters are non-zero at each sample
+    cluster_to_plot <- z_props %>%
+        filter(prop > cluster_threshold) %>%
+        distinct(sample, cluster)
+
+    if (theta) {
+        theta <- obj$theta
+        K <- dim(theta)[1]
+        P <- dim(theta)[2]
+        S <- dim(theta)[3]
+        dimnames(theta) <- list('cluster'=1:K, 'variable'=1:P, 'sample'=1:S)
+        theta_long <- as.data.frame.table(theta, responseName = "value") %>%
+                        mutate(sample = as.factor(sample), cluster = as.integer(cluster))
+
+        foo <- cluster_to_plot %>%
+            left_join(theta_long, by=c('cluster'='cluster', 'sample'='sample'))
+        plt_theta <- foo %>%
+            ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
+                geom_line() +
+                facet_wrap(~variable) +
+                ylim(0, 1) +
                 theme_bw() +
                 labs(x="Sample", y="Theta") +
                 scale_colour_discrete("Cluster", guide=F)
@@ -217,7 +210,7 @@ collapsed_gibbs_cpp(test_df, initial_K, 2, 2, 1, 0.5, 0.5, TRUE)
 
 # debug
 set.seed(12)
-gibbs_dp_cpp_wrapper(df[1:7, ], 1, debug=TRUE)
+gibbs_dp_cpp_wrapper(df[1:7, ], 2, debug=TRUE)
 
 set.seed(12)
 samples_cpp <- gibbs_collapsed_cpp_wrapper(df[1:7, ], 2, K=2, debug=TRUE)
@@ -230,7 +223,7 @@ samples <- gibbs_collapsed_cpp_wrapper(df_2, 1000, K=2)
 plot_gibbs(samples, pi=F)
 
 samples_dp <- gibbs_dp_cpp_wrapper(df_2, 1000, debug=FALSE)
-plot_gibbs_dp(samples_dp, theta=F, pi=F)
+plot_gibbs_dp(samples_dp)
 
 # Ok so seems to be fine with the number of observations, indeed it found
 # N=1000 much easier than N=100
@@ -241,6 +234,9 @@ plot_gibbs_dp(samples_dp, theta=F, pi=F)
 df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_3, 1000, K=3)
 plot_gibbs(samples, pi=F)
+
+samples_dp3 <- gibbs_dp_cpp_wrapper(df_3, 10000)
+plot_gibbs_dp(samples_dp3, cluster_threshold = 0.15)
 
 # Testing full Gibbs sampling and can see that like with the Collapsed Gibbs,
 # it works fine in the situation with K=2, N=1000.

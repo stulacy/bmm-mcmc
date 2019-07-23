@@ -64,6 +64,9 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     double RHS_newk = P * (log(beta) - log(beta + gamma));
     double dummy_newk = exp(LHS_newk + RHS_newk);
 
+    arma::cube thetas(K, P, nsamples, arma::fill::zeros);
+    std::vector <int> Ck;
+
     // At each sample, for each person:
     for (int j=1; j < nsamples; ++j) {
         Rcout << "Sample " << j+1 << "\tK: " << K << "\n";
@@ -92,7 +95,6 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
             // For k in 1:K calculate probabilities of being in k by use of the same equation as before
             // Firstly identify set of patients in this cluster
-            std::vector <int> Ck;
             std::vector <double> probs(K+1);
             double probs_sum=0;
             int k_ind = 0;
@@ -184,11 +186,23 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             if (debug) Rcout << "After sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
         }
 
-        // TODO Calculate thetas
-
+        // Estimate thetas
+        for (int k : used_clusters) {
+            Ck = clusters[k];
+            int Nk = Ck.size();
+            for (int d=0; d < P; ++d) {
+                int dsum = 0;
+                for (int c : Ck) {
+                    dsum += df_arma(c, d);
+                }
+                if (debug) Rcout << "Theta k: " << k << "\td: " << d << "\tdsum: " << dsum << "\tNk: " << Nk << "\tdsum / NK: " << dsum / (double)Nk << "\n";
+                thetas(k, d, j) = dsum / (double)Nk;
+            }
+        }
     }
     List out;
     out["z"] = allocations;
+    out["theta"] = thetas;
     return out;
 }
 
