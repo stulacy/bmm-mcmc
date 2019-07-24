@@ -64,6 +64,9 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     double RHS_newk = P * (log(beta) - log(beta + gamma));
     double dummy_newk = exp(LHS_newk + RHS_newk);
 
+    int xnd, sum_xd, k_ind, Nk;
+    double left, right, denom, full, dummy, probs_sum, LHS, logLH;
+
     arma::cube thetas(K, P, nsamples, arma::fill::zeros);
     std::vector <int> Ck;
 
@@ -95,30 +98,33 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
             // For k in 1:K calculate probabilities of being in k by use of the same equation as before
             // Firstly identify set of patients in this cluster
-            std::vector <double> probs(K+1);
-            double probs_sum=0;
-            int k_ind = 0;
+            NumericVector probs(K+1);
+            IntegerVector choices(K+1);
+            NumericVector probs_norm(K+1);
+
+            probs_sum=0;
+            k_ind = 0;
             //if (debug) Rcout << "Calculating probabilities for known K\n";
             for (int k : used_clusters) {
                 //if (debug) Rcout << "k: " << k << "\n";
                 Ck = clusters[k];
-                int Nk = Ck.size();
-                double LHS = log(Nk) - log(N - 1 + alpha);
+                Nk = Ck.size();
+                LHS = log(Nk) - log(N - 1 + alpha);
                 //if (debug) Rcout << "Nk: " << Nk << "\n";
                 //if (debug) Rcout << "LHS: " << LHS << "\n";
-                double logLH = 0;
+                logLH = 0;
                 for (int d=0; d < P; ++d) {
                     //if (debug) Rcout << "d: " << d << "\n";
-                    int sum_xd = 0;
+                    sum_xd = 0;
                     for (int c : Ck) {
                         sum_xd += df_arma(c, d);
                     }
 
-                    int xnd = df_arma(i, d);
-                    double left = xnd * log(beta + sum_xd);
-                    double right = (1-xnd) * log(gamma + Nk - sum_xd);
-                    double denom = log(beta + gamma + Nk);
-                    double full = left + right - denom;
+                    xnd = df_arma(i, d);
+                    left = xnd * log(beta + sum_xd);
+                    right = (1-xnd) * log(gamma + Nk - sum_xd);
+                    denom = log(beta + gamma + Nk);
+                    full = left + right - denom;
 
                     //if (debug) Rcout << "sum_xd: " << sum_xd << "\n";
                     //if (debug) Rcout << "left: " << left << "\n";
@@ -128,16 +134,16 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
                     logLH += full;
                 }
-                double dummy = exp(LHS + logLH);
+                dummy = exp(LHS + logLH);
                 probs_sum += dummy;
                 //if (debug) Rcout << "dummy: " << dummy << "\n";
-                probs[k_ind] = dummy;
+                probs(k_ind) = dummy;
                 k_ind++;
             }
 
             // Add on probability of creating a new cluster using Eq 25 from Maartens
             probs_sum += dummy_newk;
-            probs[K] = dummy_newk;
+            probs(K) = dummy_newk;
 
             //if (debug) {
             //    Rcout << "Raw probs: \t";
@@ -149,11 +155,9 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
             // Normalise and form K+1 cluster labels to sample from
             k_ind = 0;
-            IntegerVector choices(K+1);
-            NumericVector probs_norm(K+1);
             for (int k : used_clusters) {
                 choices(k_ind) = k;
-                probs_norm(k_ind) = probs[k_ind] / probs_sum;
+                probs_norm(k_ind) = probs(k_ind) / probs_sum;
                 k_ind++;
             }
             // Add on probability and label for new K, which will label as an unused
@@ -163,11 +167,12 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             }
             int new_cluster = unused_clusters.back();
 
-            probs_norm(K) = probs[K] / probs_sum;
+            probs_norm(K) = probs(K) / probs_sum;
             choices(K) = new_cluster;
 
             //if (debug) Rcout << "probs_sum: " << probs_sum << "\n";
-            //if (debug) Rcout << "Normalised probs: " << probs_norm << "\n";
+            if (debug) Rcout << "Raw probs (" << probs.size() << ") :" << probs << "\n";
+            if (debug) Rcout << "Normalised probs (" << probs_norm.size() << ") :" << probs_norm << "\n";
             if (debug) Rcout << "Sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
 
             // Sample z_i from it (using R's sample function rather than rmultinom)
