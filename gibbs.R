@@ -136,7 +136,7 @@ collapsed_gibbs_cpp(test_df, initial_K, 2, 2, 1, 0.5, 0.5, TRUE)
 
 # debug
 set.seed(12)
-gibbs_dp_cpp_wrapper(df[1:7, ], 2, debug=TRUE)
+foo <- gibbs_dp_cpp_wrapper(df[1:7, ], 5, debug=TRUE)
 
 set.seed(12)
 samples_cpp <- gibbs_collapsed_cpp_wrapper(df[1:7, ], 2, K=2, debug=TRUE)
@@ -146,9 +146,9 @@ plot_gibbs(samples_cpp, pi=F)
 # What about on the same dataset with 1 thousand observations?
 df_2 <- readRDS("data/K2_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_2, 1000, K=2)
-plot_gibbs(samples, pi=F))
+plot_gibbs(samples)
 
-samples_dp <- gibbs_dp_cpp_wrapper(df_2, 10000, debug=FALSE)
+samples_dp <- gibbs_dp_cpp_wrapper(df_2, 1000, debug=FALSE)
 plot_gibbs(samples_dp, pi=F, cluster_threshold = 0.1)
 
 # Ok so seems to be fine with the number of observations, indeed it found

@@ -60,20 +60,29 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
     // Can calculate probability of new cluster outside of loop as is constant
     // due to use of symmetric priors on theta with Beta(beta, gamma) beta == gamma
-    double LHS_newk = log(alpha) - log(N - 1 + alpha);
     double RHS_newk = P * (log(beta) - log(beta + gamma));
-    double dummy_newk = exp(LHS_newk + RHS_newk);
+    double LHS_newk;
+    double dummy_newk;
+    
 
     int xnd, sum_xd, k_ind, Nk;
     double left, right, denom, full, dummy, probs_sum, LHS, logLH;
 
     arma::cube thetas(K, P, nsamples, arma::fill::zeros);
     std::vector <int> Ck;
+    double a=1;
+    double b=1;
+    double epsilon, pi1, pi2, pi;
+    NumericVector alpha_sampled(nsamples);
+    alpha_sampled(0) = alpha;
+    double alpha_new;
 
     // At each sample, for each person:
     for (int j=1; j < nsamples; ++j) {
         Rcout << "Sample " << j+1 << "\tK: " << K << "\n";
+        
         for (int i = 0; i < N; ++i) {
+            
             // Drop that person from current cluster
             curr_cluster = allocations(j-1, i) - 1;
             clusters[curr_cluster].erase(std::remove(clusters[curr_cluster].begin(),
@@ -109,7 +118,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 //if (debug) Rcout << "k: " << k << "\n";
                 Ck = clusters[k];
                 Nk = Ck.size();
-                LHS = log(Nk) - log(N - 1 + alpha);
+                LHS = log(Nk) - log(N - 1 + alpha_sampled(j-1));
                 //if (debug) Rcout << "Nk: " << Nk << "\n";
                 //if (debug) Rcout << "LHS: " << LHS << "\n";
                 logLH = 0;
@@ -141,6 +150,8 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 k_ind++;
             }
 
+            LHS_newk = log(alpha_sampled(j-1)) - log(N - 1 + alpha_sampled(j-1));
+            dummy_newk = exp(LHS_newk + RHS_newk);
             // Add on probability of creating a new cluster using Eq 25 from Maartens
             probs_sum += dummy_newk;
             probs(K) = dummy_newk;
@@ -204,10 +215,32 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 thetas(k, d, j) = dsum / (double)Nk;
             }
         }
+        
+        // TODO Should this be every individual? Since K changes every individual
+        // Sample alpha from Gamma(a, b) using method described by Escobar and West 
+        // in Section 6
+        // https://pdfs.semanticscholar.org/df25/adb36860c1ad9edaac04b8855a2f19e79c5b.pdf
+        
+        // Draw epsilon from Beta(alpha + 1, n)
+        epsilon = log(R::rbeta(alpha_sampled(j-1)+1, N));
+        
+        // pi1 = a + k + 1
+        pi1 = a + K + 1;
+        // pi2 = n(b - log(epsilon))
+        pi2 = N*(b - epsilon);
+        // pi = pi1 / (pi1 + pi2)
+        pi = pi1 / (pi1 + pi2);
+        
+        // alpha = pi * Gamma(a+k, b-log(epsilon)) + (1-pi) * Gamma(a+k-1, b-log(epsilon))
+        alpha_new = pi * R::rgamma(a+K, 1/(b-epsilon)) + (1-pi) * R::rgamma(a+K-1, 1/(b-epsilon));
+        if (debug) Rcout << "log(epsilon): " << epsilon << "\tpi1: " << pi1 << "\tpi2: " << pi2 << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
+        alpha_sampled(j) = alpha_new;
+        
     }
     List out;
     out["z"] = allocations;
     out["theta"] = thetas;
+    out["alpha"] = alpha_sampled;
     return out;
 }
 
