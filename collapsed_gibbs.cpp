@@ -36,8 +36,9 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
     int P = df_arma.n_cols;
 
     // Random sample for first row
-    arma::Mat<int> allocations(nsamples, N);
-    allocations.row(0) = as<arma::Row<int>>(initialK);
+    arma::Mat<int> z_out(nsamples, N);
+    z_out.row(0) = as<arma::Row<int>>(initialK);
+    //arma::cube z_sampled(N, K, nsamples);
     arma::cube thetas(K, P, nsamples);
     int curr_cluster;
 
@@ -53,6 +54,11 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
     if (debug) Rcout << "Initial K: " << initialK << "\n";
     if (debug) Rcout << "N: " << N << "\n";
 
+    NumericVector probs(K);
+    IntegerVector this_z(K);
+    double probs_sum;
+    int Nk, sum_xd, xnd, dsum;
+    double LHS, logLH, left, right, denom, full, dummy;
 
     // At each sample, for each person:
     for (int j=1; j < nsamples; ++j) {
@@ -60,7 +66,7 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
         for (int i = 0; i < N; ++i) {
             if (debug) Rcout << "Individual " << i << "\n";
             // Drop that person from current cluster
-            curr_cluster = allocations(j-1, i);
+            curr_cluster = z_out(j-1, i) - 1;
             clusters[curr_cluster].erase(std::remove(clusters[curr_cluster].begin(),
                                                      clusters[curr_cluster].end(),
                                                      i),
@@ -68,29 +74,28 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
 
             // For k in 1:K calculate probabilities of being in k by use of the same equation as before
             // Firstly identify set of patients in this cluster
-            std::vector <double> probs(K);
-            double probs_sum=0;
+            probs_sum=0;
             if (debug) Rcout << "Calculating probabilities\n";
             for (int k=0; k < K; ++k) {
                 if (debug) Rcout << "k: " << k << "\n";
                 Ck = clusters[k];
-                int Nk = Ck.size();
-                double LHS = log(Nk) - log(N - 1 + alpha);
+                Nk = Ck.size();
+                LHS = log(Nk) - log(N - 1 + alpha);
                 if (debug) Rcout << "Nk: " << Nk << "\n";
                 if (debug) Rcout << "LHS: " << LHS << "\n";
-                double logLH = 0;
+                logLH = 0;
                 for (int d=0; d < P; ++d) {
                     if (debug) Rcout << "d: " << d << "\n";
-                    int sum_xd = 0;
+                    sum_xd = 0;
                     for (int c : Ck) {
                         sum_xd += df_arma(c, d);
                     }
 
-                    int xnd = df_arma(i, d);
-                    double left = xnd * log(beta + sum_xd);
-                    double right = (1-xnd) * log(gamma + Nk - sum_xd);
-                    double denom = log(beta + gamma + Nk);
-                    double full = left + right - denom;
+                    xnd = df_arma(i, d);
+                    left = xnd * log(beta + sum_xd);
+                    right = (1-xnd) * log(gamma + Nk - sum_xd);
+                    denom = log(beta + gamma + Nk);
+                    full = left + right - denom;
 
                     if (debug) Rcout << "sum_xd: " << sum_xd << "\n";
                     if (debug) Rcout << "left: " << left << "\n";
@@ -100,10 +105,10 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
 
                     logLH += full;
                 }
-                double dummy = exp(LHS + logLH);
+                dummy = exp(LHS + logLH);
                 probs_sum += dummy;
                 if (debug) Rcout << "dummy: " << dummy << "\n";
-                probs[k] = dummy;
+                probs(k) = dummy;
             }
 
             if (debug) {
@@ -114,31 +119,34 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                 Rcout << "\n ";
             }
 
-            // Normalise and form K+1 cluster labels to sample from
-            IntegerVector choices(K);
-            NumericVector probs_norm(K);
+            // Normalise probs
             for (int k=0; k < K; ++k) {
-                choices(k) = k;
-                probs_norm(k) = probs[k] / probs_sum;
+                probs(k) /= probs_sum;
             }
 
+            // Sample z_i using R multinom as slightly more efficient
+            // this returns a ones hot encoded binary that needs converting to int
+            rmultinom(1, probs.begin(), K, this_z.begin());
+
             if (debug) Rcout << "probs_sum: " << probs_sum << "\n";
-            if (debug) Rcout << "Normalised probs: " << probs_norm << "\n";
+            if (debug) Rcout << "Normalised probs: " << probs << "\n";
+            if (debug) Rcout << "Sample: " << this_z << "\n";
 
-            // Sample z_i from it (using R's sample function rather than rmultinom)
-            int ret = RcppArmadillo::sample(choices, 1, false, probs_norm)(0);
-            if (debug) Rcout << "Sample: " << ret << "\n";
-
-            clusters[ret].push_back(i);
-            allocations(j, i) = ret;
+            for (int k = 0; k < K; ++k) {
+                if (this_z(k) == 1) {
+                    z_out(j, i) = k + 1;
+                    clusters[k].push_back(i);
+                    continue;
+                }
+            }
         }
 
         // Estimate thetas
         for (int k=0; k < K; ++k) {
             Ck = clusters[k];
-            int Nk = Ck.size();
+            Nk = Ck.size();
             for (int d=0; d < P; ++d) {
-                int dsum = 0;
+                dsum = 0;
                 for (int c : Ck) {
                     dsum += df_arma(c, d);
                 }
@@ -149,7 +157,7 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
     }
 
     List ret;
-    ret["z"] = allocations;
+    ret["z"] = z_out;
     ret["theta"] = thetas;
     return ret;
 }

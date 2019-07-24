@@ -52,7 +52,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     std::vector<int> unused_clusters;
     for (int i = 0; i < N; ++i) {
         clusters[i] = std::vector<int> {i};
-        allocations(0, i) = i;
+        allocations(0, i) = i + 1;
         used_clusters.push_back(i);
     }
 
@@ -72,7 +72,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
         Rcout << "Sample " << j+1 << "\tK: " << K << "\n";
         for (int i = 0; i < N; ++i) {
             // Drop that person from current cluster
-            curr_cluster = allocations(j-1, i);
+            curr_cluster = allocations(j-1, i) - 1;
             clusters[curr_cluster].erase(std::remove(clusters[curr_cluster].begin(),
                                                      clusters[curr_cluster].end(),
                                                      i),
@@ -182,7 +182,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 K++;
             }
             clusters[ret].push_back(i);
-            allocations(j, i) = ret;
+            allocations(j, i) = ret + 1;
             if (debug) Rcout << "After sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
         }
 
