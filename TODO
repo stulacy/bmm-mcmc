@@ -1,4 +1,4 @@
-  - Fix issue with label switching in DP sampling
-  - Speed up collapsed Gibbs - try going back to non-vectorised method?
+  - Add Gamma prior on Alpha in DP sampling (should aid cluster identification)
+  - Add Gamma prior on Alpha in finite mixture modelling
   - Implement predictive distribution
   - Incorporate redundant features into likelihood

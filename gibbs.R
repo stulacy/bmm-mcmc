@@ -148,7 +148,7 @@ df_2 <- readRDS("data/K2_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_2, 1000, K=2)
 plot_gibbs(samples, pi=F))
 
-samples_dp <- gibbs_dp_cpp_wrapper(df_2, 10000, debug=FALSE)
+samples_dp <- gibbs_dp_cpp_wrapper(df_2, 10000, debug=FALSE, alpha = 0.1)
 plot_gibbs(samples_dp, pi=F, cluster_threshold = 0.1)
 
 # Ok so seems to be fine with the number of observations, indeed it found
@@ -162,7 +162,7 @@ samples <- gibbs_collapsed_cpp_wrapper(df_3, 1000, K=3)
 plot_gibbs(samples, pi=F)
 
 samples_dp3 <- gibbs_dp_cpp_wrapper(df_3, 1000)
-plot_gibbs_dp(samples_dp3, cluster_threshold = 0.15)
+plot_gibbs(samples_dp3, cluster_threshold = 0.15)
 
 # Testing full Gibbs sampling and can see that like with the Collapsed Gibbs,
 # it works fine in the situation with K=2, N=1000.
