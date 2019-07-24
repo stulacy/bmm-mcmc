@@ -48,6 +48,7 @@ List gibbs_cpp(IntegerMatrix df,
     NumericMatrix pi_sampled(nsamples, K);
     arma::cube z_sampled(N, K, nsamples);
     arma::cube theta_sampled(K, P, nsamples);
+    arma::Mat<int> z_out(nsamples, N);
 
     int Znk;
     double loglh, cum_probs, dummy;
@@ -162,9 +163,21 @@ List gibbs_cpp(IntegerMatrix df,
         theta_sampled.slice(j) = as<arma::mat>(theta_row);
     }
 
+    // Determine cluster labels for sampled values, as currently are in binary format
+    for (int j = 0; j < nsamples; ++j) {
+        for (int i = 0; i < N; ++i) {
+            for (int k = 0; k < K; ++k) {
+                if (z_sampled(i, k, j) == 1) {
+                    z_out(j, i) = k + 1;
+                    continue;
+                }
+            }
+        }
+    }
+
     List ret;
     ret["pi"] = pi_sampled;
-    ret["z"] = z_sampled;
+    ret["z"] = z_out;
     ret["theta"] = theta_sampled;
     return(ret);
 }
