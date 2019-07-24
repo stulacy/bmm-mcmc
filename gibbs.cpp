@@ -46,9 +46,10 @@ List gibbs_cpp(IntegerMatrix df,
 
     // Random sample for first row
     NumericMatrix pi_sampled(nsamples, K);
-    arma::Mat<int> z_sampled(nsamples, N);
+    arma::cube z_sampled(N, K, nsamples);
     arma::cube theta_sampled(K, P, nsamples);
 
+    int Znk;
     double loglh, cum_probs, dummy;
     pi_sampled(0, _) = initialPi;
     theta_sampled.slice(0) = as<arma::mat>(initialTheta);
@@ -58,7 +59,6 @@ List gibbs_cpp(IntegerMatrix df,
     arma::vec dirich_params = arma::zeros(K);
     NumericVector this_pi(K);
     NumericMatrix theta_row(K, P);
-    std::vector< std::vector< int > > clusters(K);
 
     for (int j=1; j < nsamples; ++j) {
         Rcpp::Rcout << "Sample: " << j+1 << "\n";
@@ -96,11 +96,9 @@ List gibbs_cpp(IntegerMatrix df,
                 Rcout << "\n";
             }
 
-            IntegerVector choices(K);
             // Then normalise
             for (int p = 0; p < K; ++p) {
                 s[p] /= cum_probs;
-                choices(p) = p;
             }
 
             if (debug) {
@@ -111,11 +109,10 @@ List gibbs_cpp(IntegerMatrix df,
                 Rcout << "\n";
             }
 
-            // Sample z_i from it (using R's sample function rather than rmultinom)
-            int this_z = RcppArmadillo::sample(choices, 1, false, s)(0);
+            // Now can draw labels
+            rmultinom(1, s.begin(), K, this_z.begin());
             if (debug) Rcout << "this_z: " << this_z << "\n";
-            clusters[this_z].push_back(i);
-            z_sampled(j, i) = this_z;
+            z_sampled.slice(j).row(i) = as<arma::vec>(this_z).t();
         }
 
         if (debug) Rcout << "\n\nNow going to sample pi and thetas\n";
@@ -123,20 +120,20 @@ List gibbs_cpp(IntegerMatrix df,
         // Now calculate number of patients in each cluster and sum of data points as before
         IntegerVector ck(K);
         IntegerMatrix Vkd(K, P);
-        std::vector<int> Ck;
         for (int k = 0; k < K; ++k) {
-            Ck = clusters[k];
-            ck[k] = Ck.size();
-            for (int i : Ck) {
+            for (int i=0; i < N; ++i) {
+                Znk = z_sampled(i, k, j);
+                ck[k] += Znk;
                 for (int d = 0; d < P; ++d) {
                     if (debug) {
                         Rcout << "k: " << k << "\t";
                         Rcout << "d: " << d << "\t";
                         Rcout << "i: " << i << "\t";
+                        Rcout << "Znk: " << Znk << "\t";
                         Rcout << "ck[k]: " << ck[k] << "\t";
                         Rcout << "df[i, d]: " << df(i, d) << "\n";
                     }
-                    Vkd(k, d) += df(i, d);
+                    Vkd(k, d) += Znk * df(i, d);
                 }
             }
         }
