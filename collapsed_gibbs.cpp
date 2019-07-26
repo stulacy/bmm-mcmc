@@ -80,7 +80,7 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                 if (debug) Rcout << "k: " << k << "\n";
                 Ck = clusters[k];
                 Nk = Ck.size();
-                LHS = log(Nk) - log(N - 1 + alpha);
+                LHS = log(Nk + (alpha/K)) - log(N - 1 + alpha);
                 if (debug) Rcout << "Nk: " << Nk << "\n";
                 if (debug) Rcout << "LHS: " << LHS << "\n";
                 logLH = 0;
