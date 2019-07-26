@@ -4,9 +4,18 @@
 # Then will finalise with infinite mixture using Dirichlet Process prior
 library(tidyverse)
 library(gridExtra)
+Rcpp::sourceCpp('collapsed_gibbs_dp.cpp')
+Rcpp::sourceCpp('collapsed_gibbs.cpp')
+Rcpp::sourceCpp('gibbs.cpp')
 
-gibbs_dp_cpp_wrapper <- function(df, nsamples, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
-    collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, debug)
+plot_alpha <- function(obj) {
+    ggplot(data.frame(foo=obj$alpha), aes(foo)) +
+        geom_histogram(binwidth = 0.1, colour="black", fill="white") +
+        xlim(0, 5)
+}
+
+gibbs_dp_cpp_wrapper <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
+    collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, debug)
 }
 
 gibbs_collapsed_cpp_wrapper <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
@@ -75,8 +84,10 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_
         cluster_to_plot <- z_props %>%
             filter(prop > cluster_threshold) %>%
             distinct(sample, cluster)
+        unique_clusters <- unique(cluster_to_plot$cluster)
 
         plt_z <- z_props %>%
+            mutate(cluster = factor(cluster, levels=unique_clusters)) %>%
             ggplot(aes(x=as.integer(sample), y=prop, colour=cluster)) +
                 geom_line() +
                 theme_bw() +
@@ -100,13 +111,15 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_
 
         if (!is.null(theta_to_display)) {
             theta_long <- theta_long %>%
-                            filter(theta_var %in% theta_to_display)
+                            filter(theta_var %in% theta_to_display) %>%
+                            mutate(theta_var = factor(theta_var, levels=theta_to_display))
         }
 
         foo <- cluster_to_plot %>%
             left_join(theta_long, by=c('cluster'='cluster', 'sample'='sample'))
         plt_theta <- foo %>%
             filter(sample != 1) %>%
+            mutate(cluster = factor(cluster, levels=unique_clusters)) %>%
             ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
                 geom_line() +
                 facet_wrap(~theta_var) +
@@ -122,17 +135,11 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_
 # Ok this has seemed to work on an easy dataset with 100 observations
 # and 2 well separated classes
 df <- readRDS("data/K2_N100_P5_clean.rds")
-#samples_R <- gibbs_collapsed(df, 100, K=2)
-#plot_gibbs(samples_R)
 
 # Form dataset that know what the first values should be
 # N = 4, P = 3, K =2
 test_df <- matrix(c(0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0), nrow=4, ncol=3, byrow=T)
 test_df
-initial_K <- matrix(c(1, 0, 0, 1, 1, 0, 0, 1), nrow=4, ncol=2, byrow=T)
-initial_K
-
-collapsed_gibbs_cpp(test_df, initial_K, 2, 2, 1, 0.5, 0.5, TRUE)
 
 # debug
 set.seed(12)
@@ -148,7 +155,7 @@ df_2 <- readRDS("data/K2_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_2, 1000, K=2)
 plot_gibbs(samples)
 
-samples_dp <- gibbs_dp_cpp_wrapper(df_2, 1000, debug=FALSE)
+samples_dp <- gibbs_dp_cpp_wrapper(df_2, 10000, debug=FALSE)
 plot_gibbs(samples_dp, pi=F, cluster_threshold = 0.1)
 
 # Ok so seems to be fine with the number of observations, indeed it found
@@ -159,10 +166,10 @@ plot_gibbs(samples_dp, pi=F, cluster_threshold = 0.1)
 # Oh it does seem to have worked now have separated clusters more
 df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
 samples <- gibbs_collapsed_cpp_wrapper(df_3, 1000, K=3)
-plot_gibbs(samples, pi=F)
+plot_gibbs(samples)
 
-samples_dp3 <- gibbs_dp_cpp_wrapper(df_3, 1000)
-plot_gibbs_dp(samples_dp3, cluster_threshold = 0.15)
+samples_dp3 <- gibbs_dp_cpp_wrapper(df_3, 20000)
+plot_gibbs(samples_dp3, cluster_threshold = 0.10)
 
 # Testing full Gibbs sampling and can see that like with the Collapsed Gibbs,
 # it works fine in the situation with K=2, N=1000.
