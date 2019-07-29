@@ -1,12 +1,6 @@
-# Runs Gibbs sampling
-# Starting with fixed K
-# Then will buildup to random K using Dirichlet prior
-# Then will finalise with infinite mixture using Dirichlet Process prior
-library(tidyverse)
-library(gridExtra)
-Rcpp::sourceCpp('collapsed_gibbs_dp.cpp')
-Rcpp::sourceCpp('collapsed_gibbs.cpp')
-Rcpp::sourceCpp('gibbs.cpp')
+Rcpp::sourceCpp('src/collapsed_gibbs_dp.cpp')
+Rcpp::sourceCpp('src/collapsed_gibbs.cpp')
+Rcpp::sourceCpp('src/full_gibbs.cpp')
 
 plot_alpha <- function(obj) {
     ggplot(data.frame(foo=obj$alpha), aes(foo)) +
@@ -14,17 +8,17 @@ plot_alpha <- function(obj) {
         xlim(0, 5)
 }
 
-gibbs_dp_cpp_wrapper <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
+gibbs_dp <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
     collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, debug)
 }
 
-gibbs_collapsed_cpp_wrapper <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
+gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
     initial_K <- sample(1:K, nrow(df), replace=T)-1
     collapsed_gibbs_cpp(df, initial_K,
                         nsamples, K, alpha, beta, gamma, debug)
 }
 
-gibbs_full_cpp_wrapper <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
+gibbs_full <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
                                    debug=FALSE) {
     initial_pi <- runif(K)
     initial_pi <- exp(initial_pi)
@@ -131,52 +125,3 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_
     }
     grid.arrange(arrangeGrob(grobs=plts, ncol=1, heights=heights))
 }
-
-# Ok this has seemed to work on an easy dataset with 100 observations
-# and 2 well separated classes
-df <- readRDS("data/K2_N100_P5_clean.rds")
-
-# Form dataset that know what the first values should be
-# N = 4, P = 3, K =2
-test_df <- matrix(c(0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0), nrow=4, ncol=3, byrow=T)
-test_df
-
-# debug
-set.seed(12)
-samples_cpp <- gibbs_collapsed_cpp_wrapper(df[1:7, ], 2, K=2, debug=TRUE)
-
-set.seed(12)
-foo <- gibbs_dp_cpp_wrapper(df[1:7, ], 5, debug=TRUE)
-
-# What about on the same dataset with 1 thousand observations?
-df_2 <- readRDS("data/K2_N1000_P5_clean.rds")
-samples <- gibbs_collapsed_cpp_wrapper(df_2, 1000, K=2)
-plot_gibbs(samples)
-
-samples_dp <- gibbs_dp_cpp_wrapper(df_2, 10000, debug=FALSE)
-plot_gibbs(samples_dp, pi=F, cluster_threshold = 0.1)
-
-# Ok so seems to be fine with the number of observations, indeed it found
-# N=1000 much easier than N=100
-
-# So is it the number of clusters that's the problem?
-# Let's try using K=3
-# Oh it does seem to have worked now have separated clusters more
-df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
-samples <- gibbs_collapsed_cpp_wrapper(df_3, 1000, K=3)
-plot_gibbs(samples)
-
-samples_dp3 <- gibbs_dp_cpp_wrapper(df_3, 20000)
-plot_gibbs(samples_dp3, cluster_threshold = 0.10)
-
-# Testing full Gibbs sampling and can see that like with the Collapsed Gibbs,
-# it works fine in the situation with K=2, N=1000.
-# And furthermore can easily obtain thetas, which must be obtainable from
-# collapsed gibbs sampler but I just don't know how.
-foo <- gibbs_full_cpp_wrapper(df_2, 1000, 2, debug=FALSE)
-plot_gibbs(foo)
-
-# Can it handle K=3 however?
-# Yes it can rather easily
-foo <- gibbs_full_cpp_wrapper(df_3, 1000, 3)
-plot_gibbs(foo)
