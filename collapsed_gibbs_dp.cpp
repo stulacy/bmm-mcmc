@@ -69,7 +69,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
     arma::cube thetas(K, P, nsamples, arma::fill::zeros);
     std::vector <int> Ck;
-    double epsilon, pi1, pi2, pi;
+    double b_eps, pi, pi1, pi2;
     NumericVector alpha_sampled(nsamples);
     alpha_sampled(0) = alpha;
     double alpha_new, foobar, sumprob, left_denom;
@@ -184,6 +184,19 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             clusters[ret].push_back(i);
             allocations(j, i) = ret + 1;
             if (debug) Rcout << "After sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
+
+        // Sample alpha from Gamma(a, b) using method described by Escobar and West
+        // in Section 6
+        // https://pdfs.semanticscholar.org/df25/adb36860c1ad9edaac04b8855a2f19e79c5b.pdf
+        b_eps = b - log(R::rbeta(alpha_sampled(j-1)+1, N));
+        pi1 = a + K - 1;
+        pi2 = N * b_eps;
+        pi = pi1 / (pi1 + pi2);
+
+        alpha_new = pi * R::rgamma(a+K, 1/(b_eps)) + (1-pi) * R::rgamma(a+K-1, 1/(b_eps));
+
+        if (debug) Rcout << "b-log(epsilon): " << b_eps << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
+        alpha_sampled(j) = alpha_new;
         }
 
         // Estimate thetas
@@ -195,21 +208,10 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 for (int c : Ck) {
                     dsum += df_arma(c, d);
                 }
-                if (debug) Rcout << "Theta k: " << k << "\td: " << d << "\tdsum: " << dsum << "\tNk: " << Nk << "\tdsum / NK: " << dsum / (double)Nk << "\n";
                 thetas(k, d, j) = dsum / (double)Nk;
             }
         }
 
-        // Sample alpha from Gamma(a, b) using method described by Escobar and West
-        // in Section 6
-        // https://pdfs.semanticscholar.org/df25/adb36860c1ad9edaac04b8855a2f19e79c5b.pdf
-        epsilon = log(R::rbeta(alpha_sampled(j-1)+1, N));
-        pi1 = a + K + 1;
-        pi2 = N*(b - epsilon);
-        pi = pi1 / (pi1 + pi2);
-        alpha_new = pi * R::rgamma(a+K, b-epsilon) + (1-pi) * R::rgamma(a+K-1, b-epsilon);
-        if (debug) Rcout << "log(epsilon): " << epsilon << "\tpi1: " << pi1 << "\tpi2: " << pi2 << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
-        alpha_sampled(j) = alpha_new;
 
     }
     List out;
