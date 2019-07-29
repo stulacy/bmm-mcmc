@@ -1,2 +1,3 @@
-  - Dirichlet process
-  - Try getting it working with redundant features
+  - Fix issue with label switching in DP sampling
+  - Implement predictive distribution
+  - Incorporate redundant features into likelihood
