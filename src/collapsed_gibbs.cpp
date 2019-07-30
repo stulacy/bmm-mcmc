@@ -28,6 +28,7 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                          double alpha,
                          double beta,
                          double gamma,
+                         int burnin,
                          bool debug) {
 
     arma::Mat<int> df_arma = as<arma::Mat<int>>(df);
@@ -46,11 +47,10 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
     // Helps to quickly identify Ck
     std::vector< std::vector< int > > clusters(K);
     for (int i=0; i < N; ++i) {
-        clusters[initialK(i)].push_back(i);
+        clusters[initialK(i)-1].push_back(i);
     }
 
     std::vector <int> Ck;
-    if (debug) Rcout << "Initial K: " << initialK << "\n";
     if (debug) Rcout << "Initial K: " << initialK << "\n";
     if (debug) Rcout << "N: " << N << "\n";
 
@@ -80,32 +80,37 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                 if (debug) Rcout << "k: " << k << "\n";
                 Ck = clusters[k];
                 Nk = Ck.size();
-                LHS = log(Nk + (alpha/K)) - log(N - 1 + alpha);
-                if (debug) Rcout << "Nk: " << Nk << "\n";
-                if (debug) Rcout << "LHS: " << LHS << "\n";
-                logLH = 0;
-                for (int d=0; d < P; ++d) {
-                    if (debug) Rcout << "d: " << d << "\n";
-                    sum_xd = 0;
-                    for (int c : Ck) {
-                        sum_xd += df_arma(c, d);
+                
+                if (Nk > 0) {
+                    LHS = log(Nk + (alpha/K)) - log(N - 1 + alpha);
+                    if (debug) Rcout << "Nk: " << Nk << "\n";
+                    if (debug) Rcout << "LHS: " << LHS << "\n";
+                    logLH = 0;
+                    for (int d=0; d < P; ++d) {
+                        if (debug) Rcout << "d: " << d << "\n";
+                        sum_xd = 0;
+                        for (int c : Ck) {
+                            sum_xd += df_arma(c, d);
+                        }
+    
+                        xnd = df_arma(i, d);
+                        left = xnd * log(beta + sum_xd);
+                        right = (1-xnd) * log(gamma + Nk - sum_xd);
+                        denom = log(beta + gamma + Nk);
+                        full = left + right - denom;
+    
+                        if (debug) Rcout << "sum_xd: " << sum_xd << "\n";
+                        if (debug) Rcout << "left: " << left << "\n";
+                        if (debug) Rcout << "right: " << right << "\n";
+                        if (debug) Rcout << "denom: " << denom << "\n";
+                        if (debug) Rcout << "full: " << full << "\n";
+    
+                        logLH += full;
                     }
-
-                    xnd = df_arma(i, d);
-                    left = xnd * log(beta + sum_xd);
-                    right = (1-xnd) * log(gamma + Nk - sum_xd);
-                    denom = log(beta + gamma + Nk);
-                    full = left + right - denom;
-
-                    if (debug) Rcout << "sum_xd: " << sum_xd << "\n";
-                    if (debug) Rcout << "left: " << left << "\n";
-                    if (debug) Rcout << "right: " << right << "\n";
-                    if (debug) Rcout << "denom: " << denom << "\n";
-                    if (debug) Rcout << "full: " << full << "\n";
-
-                    logLH += full;
+                    dummy = exp(LHS + logLH);
+                } else {
+                    dummy = 0;
                 }
-                dummy = exp(LHS + logLH);
                 probs_sum += dummy;
                 if (debug) Rcout << "dummy: " << dummy << "\n";
                 probs(k) = dummy;
@@ -133,8 +138,9 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
 
             if (debug) Rcout << "probs_sum: " << probs_sum << "\n";
             if (debug) Rcout << "Normalised probs: " << probs << "\n";
-            if (debug) Rcout << "Sample: " << this_z << "\n";
+            if (debug) Rcout << "sampled z: " << this_z << "\n";
 
+            // Save cluster assignment as label in 1...K rather than one hot encoded binary
             for (int k = 0; k < K; ++k) {
                 if (this_z(k) == 1) {
                     z_out(j, i) = k + 1;
@@ -158,11 +164,15 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
             }
         }
     }
-
+    
     List ret;
-    ret["z"] = z_out;
-    ret["probabilities"] = probs_out;
-    ret["theta"] = thetas;
+    ret["z"] = z_out.rows(burnin, nsamples-1);
+    // Due to how subcubes work (i.e. when have sliced them), can't just
+    // return directly, but instead need to force as cube
+    arma::cube thetas_post = thetas.tail_slices(nsamples - burnin);
+    arma::cube probs_post = probs_out.rows(burnin, nsamples-1);
+    ret["theta"] = thetas_post;
+    ret["probabilities"] = probs_post;
     return ret;
 }
 

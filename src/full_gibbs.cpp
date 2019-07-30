@@ -38,6 +38,7 @@ List gibbs_cpp(IntegerMatrix df,
                         double alpha,
                         double beta,
                         double gamma,
+                        int burnin,
                         bool debug) {
 
     int N = df.nrow();
@@ -174,11 +175,12 @@ List gibbs_cpp(IntegerMatrix df,
             }
         }
     }
-
+    
     List ret;
-    ret["pi"] = pi_sampled;
-    ret["z"] = z_out;
-    ret["theta"] = theta_sampled;
+    ret["pi"] = pi_sampled(Range(burnin, nsamples-1), _);
+    ret["z"] = z_out.tail_rows(nsamples-burnin);
+    arma::cube thetas_post = theta_sampled.tail_slices(nsamples - burnin);
+    ret["theta"] = thetas_post;
     return(ret);
 }
 

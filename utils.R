@@ -8,25 +8,28 @@ plot_alpha <- function(obj) {
         xlim(0, 5)
 }
 
-gibbs_dp <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
-    collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, debug)
+gibbs_dp <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, burnin=NULL, debug=FALSE) {
+    if (is.null(burnin)) burnin <- 0.1 * nsamples
+    collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, burnin, debug)
 }
 
-gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, debug=FALSE) {
-    initial_K <- sample(1:K, nrow(df), replace=T)-1
+gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, burnin=NULL, debug=FALSE) {
+    if (is.null(burnin)) burnin <- 0.1 * nsamples
+    initial_K <- sample(1:K, nrow(df), replace=T)
     collapsed_gibbs_cpp(df, initial_K,
-                        nsamples, K, alpha, beta, gamma, debug)
+                        nsamples, K, alpha, beta, gamma, burnin, debug)
 }
 
 gibbs_full <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
-                                   debug=FALSE) {
+                       burnin=NULL, debug=FALSE) {
+    if (is.null(burnin)) burnin <- 0.1 * nsamples
     initial_pi <- runif(K)
     initial_pi <- exp(initial_pi)
     initial_pi <- initial_pi / sum(initial_pi)
 
     initial_theta <- matrix(runif(K*ncol(data)), ncol=ncol(data), nrow=K)
     gibbs_cpp(data, initial_pi, initial_theta,
-              nsamples, K, alpha, beta, gamma, debug)
+              nsamples, K, alpha, beta, gamma, burnin, debug)
 }
 
 plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_threshold=0.1,

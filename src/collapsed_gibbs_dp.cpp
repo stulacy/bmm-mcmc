@@ -28,6 +28,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                             double gamma,
                             double a,
                             double b,
+                            int burnin,
                             bool debug) {
 
     // Setup int K giving current number of clusters, initialised to number of observations
@@ -70,7 +71,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     arma::cube thetas(K, P, nsamples, arma::fill::zeros);
     std::vector <int> Ck;
     double b_eps, pi, pi1, pi2;
-    NumericVector alpha_sampled(nsamples);
+    arma::vec alpha_sampled(nsamples);
     alpha_sampled(0) = alpha;
     double alpha_new, foobar, sumprob, left_denom;
 
@@ -118,6 +119,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 //if (debug) Rcout << "k: " << k << "\n";
                 Ck = clusters[used_clusters[k]];
                 Nk = Ck.size();
+                if (Nk == 0) Rcout << "Nk of 0!!!!\n";
                 LHS = log(Nk) - left_denom;
                 //if (debug) Rcout << "Nk: " << Nk << "\n";
                 //if (debug) Rcout << "LHS: " << LHS << "\n";
@@ -214,10 +216,12 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
 
     }
+    
     List out;
-    out["z"] = allocations;
-    out["theta"] = thetas;
-    out["alpha"] = alpha_sampled;
+    arma::cube thetas_post = thetas.tail_slices(nsamples - burnin);
+    out["z"] = allocations.tail_rows(nsamples-burnin);
+    out["theta"] = thetas_post;
+    out["alpha"] = alpha_sampled.tail(nsamples-burnin);
     return out;
 }
 
