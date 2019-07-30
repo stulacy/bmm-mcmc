@@ -1,3 +1,7 @@
-  - Fix issue with label switching in DP sampling
+  - Fix label switching issue:
+      - Implement label switching loss functions (Kullback-Leibler method) (see Stephens 2000)
+  - Alternative to DP model with unknown K:
+      - Try allocation sampler (Nobile and Fearnside 2007, collapses out bernoulli parameters and cluster weights when conjugate priors are used)
+      - Try RJMCMC sampler (more general than allocation, samples all parameters. Richardson and Green 1997)
+  - Incorporate redundant features into likelihood (look up White 2016)
   - Implement predictive distribution
-  - Incorporate redundant features into likelihood

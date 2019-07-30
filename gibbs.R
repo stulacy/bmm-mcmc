@@ -28,7 +28,7 @@ samples <- gibbs_collapsed(df_2, 1000, K=2)
 plot_gibbs(samples)
 
 samples_dp <- gibbs_dp(df_2, 10000, debug=FALSE, alpha = 0.1)
-plot_gibbs(samples_dp, pi=F, cluster_threshold = 0.1)
+plot_gibbs(samples_dp, cluster_threshold = 0.1)
 
 # Ok so seems to be fine with the number of observations, indeed it found
 # N=1000 much easier than N=100
