@@ -38,8 +38,8 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
     // Random sample for first row
     arma::Mat<int> z_out(nsamples, N);
     z_out.row(0) = as<arma::Row<int>>(initialK);
-    //arma::cube z_sampled(N, K, nsamples);
     arma::cube thetas(K, P, nsamples);
+    arma::cube probs_out(nsamples, N, K);
     int curr_cluster;
 
     // Vector for each cluster to track members
@@ -124,6 +124,9 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                 probs(k) /= probs_sum;
             }
 
+            // Save probabilities so can fix label switching after sampling
+            probs_out.tube(j, i) = as<arma::vec>(probs);
+
             // Sample z_i using R multinom as slightly more efficient
             // this returns a ones hot encoded binary that needs converting to int
             rmultinom(1, probs.begin(), K, this_z.begin());
@@ -158,6 +161,7 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
 
     List ret;
     ret["z"] = z_out;
+    ret["probabilities"] = probs_out;
     ret["theta"] = thetas;
     return ret;
 }
