@@ -9,12 +9,12 @@ plot_alpha <- function(obj) {
 }
 
 gibbs_dp <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, burnin=NULL, debug=FALSE) {
-    if (is.null(burnin)) burnin <- 0.1 * nsamples
+    if (is.null(burnin)) burnin <- round(0.1 * nsamples)
     collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, burnin, debug)
 }
 
 gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, burnin=NULL, debug=FALSE) {
-    if (is.null(burnin)) burnin <- 0.1 * nsamples
+    if (is.null(burnin)) burnin <- round(0.1 * nsamples)
     initial_K <- sample(1:K, nrow(df), replace=T)
     collapsed_gibbs_cpp(df, initial_K,
                         nsamples, K, alpha, beta, gamma, burnin, debug)
@@ -22,7 +22,7 @@ gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, burni
 
 gibbs_full <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
                        burnin=NULL, debug=FALSE) {
-    if (is.null(burnin)) burnin <- 0.1 * nsamples
+    if (is.null(burnin)) burnin <- round(0.1 * nsamples)
     initial_pi <- runif(K)
     initial_pi <- exp(initial_pi)
     initial_pi <- initial_pi / sum(initial_pi)

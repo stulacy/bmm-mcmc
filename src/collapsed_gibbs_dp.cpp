@@ -45,7 +45,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
     // Also want to save allocations along sampler
     arma::Mat<int> allocations(nsamples, N);
-
+    
     // Create 2D vector of cluster membership. Vector is K length with each entry being
     // 1D vector detailing the observations residing in that cluster
     std::vector< std::vector< int > > clusters(N);
@@ -68,7 +68,10 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     int xnd, sum_xd, Nk;
     double left, right, LHS, denom, logLH, max_prob, probs_newk;
 
+    // And want to save probabilities and thetas
     arma::cube thetas(K, P, nsamples, arma::fill::zeros);
+    //arma::cube probs_out(nsamples, N, K, arma::fill::zeros);
+
     std::vector <int> Ck;
     double b_eps, pi, pi1, pi2;
     arma::vec alpha_sampled(nsamples);
@@ -141,7 +144,13 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 choices(k) = used_clusters[k];
             }
 
-            // Add on probability of creating a new cluster
+            // Add on probability and label for new K, which will label as an unused
+            // cluster in the N dimensions, and hence is available
+            if (unused_clusters.size() == 0) {
+                Rcpp::stop("Error: have no free clusters, need to create one.");
+            }
+            int new_cluster = unused_clusters.back();
+            choices(K) = new_cluster;
             probs(K) = probs_newk;
 
             // Calculate exponentiated probs using exponentiate-normalise trick
@@ -154,18 +163,12 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 sumprob += foobar;
             }
 
-            // Finish softmax exp-normalise and form K cluster labels to sample from
+            // Finish softmax exp-normalise 
             for (int k=0; k <= K; ++k) {
                 probs_norm(k) /= sumprob;
+                // Saving probabilities so can relabel afterwards
+                //probs_out(j, i, choices(k)) = probs_norm(k);
             }
-
-            // Add on probability and label for new K, which will label as an unused
-            // cluster in the N dimensions, and hence is available
-            if (unused_clusters.size() == 0) {
-                Rcpp::stop("Error: have no free clusters, need to create one.");
-            }
-            int new_cluster = unused_clusters.back();
-            choices(K) = new_cluster;
 
             //if (debug) Rcout << "probs_sum: " << probs_sum << "\n";
             if (debug) Rcout << "Raw probs (" << probs.size() << ") :" << probs << "\n";
@@ -222,6 +225,8 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     out["z"] = allocations.tail_rows(nsamples-burnin);
     out["theta"] = thetas_post;
     out["alpha"] = alpha_sampled.tail(nsamples-burnin);
+    //arma::cube probs_post = probs_out.rows(burnin, nsamples-1);
+    //out["probabilities"] = probs_post;
     return out;
 }
 
