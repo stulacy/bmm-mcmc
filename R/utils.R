@@ -1,6 +1,6 @@
-Rcpp::sourceCpp('src/collapsed_gibbs_dp.cpp')
-Rcpp::sourceCpp('src/collapsed_gibbs.cpp')
-Rcpp::sourceCpp('src/full_gibbs.cpp')
+#Rcpp::sourceCpp('src/collapsed_gibbs_dp.cpp')
+#Rcpp::sourceCpp('src/collapsed_gibbs.cpp')
+#Rcpp::sourceCpp('src/full_gibbs.cpp')
 
 plot_alpha <- function(obj) {
     ggplot(data.frame(foo=obj$alpha), aes(foo)) +

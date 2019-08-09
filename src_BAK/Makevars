@@ -1,0 +1,3 @@
+PKG_LIBS=-L"/home/stuart/repos/bmm-mcmc/lib"
+PKG_CXXFLAGS=-lm -ldl /home/stuart/repos/bmm-mcmc/lib/liblpsolve55.a
+PKG_CPPFLAGS=-I"/home/stuart/repos/bmm-mcmc/src/lpsolve"

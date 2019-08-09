@@ -1,0 +1,3 @@
+#PKG_LIBS=-L"../lib" -l lpsolve55
+PKG_CPPFLAGS=-I"ls_source" -I"ls_source/bfp" -I"ls_source/bfp/bfp_LUSOL" -I"ls_source/bfp/bfp_LUSOL/LUSOL" -I"ls_source/colamd" -I"ls_source/shared"
+#PKG_CPPFLAGS=-I"lpsolve_include"
