@@ -1,7 +1,4 @@
-// [[Rcpp::depends(RcppArmadillo)]]
-
-#include <RcppArmadillo.h>
-#include "my_lpsolve.h"
+#include "stephens.h"
 
 using namespace Rcpp;
 
@@ -12,8 +9,6 @@ arma::Mat<int> my_stephens_batch(arma::cube p, bool debug) {
     int K = p.n_cols;
     int M = p.n_slices;
     
-    // TODO Force p as N x K x M
-  
     arma::mat cost_matrix(K, K);
     arma::Mat<int> perm(M, K);
     

@@ -1,6 +1,8 @@
 // [[Rcpp::depends(RcppArmadillo)]]
 
 #include <RcppArmadillo.h>
+#include <stdio.h>
+#include "ls_source/lp_lib.h"
 
 using namespace Rcpp;
 
