@@ -1,15 +1,16 @@
-#include <Rcpp.h>
+// [[Rcpp::depends(RcppArmadillo)]]
+
+#include <RcppArmadillo.h>
 #include <stdio.h>
 #include "ls_source/lp_lib.h"
+#include "my_lpsolve.h"
 
 using namespace Rcpp;
 
-void lp_transbig_edit(int, int, double *, double *);
-
 // [[Rcpp::export]]
-IntegerMatrix lpsolve(NumericMatrix x) {
-    int rcount = x.nrow();
-    int ccount = x.ncol();
+arma::Mat<int> my_lpsolve(arma::mat x) {
+    int rcount = x.n_rows;
+    int ccount = x.n_cols;
     double objective[1+(rcount * ccount)];
     double solution[rcount * ccount];
     
@@ -21,14 +22,10 @@ IntegerMatrix lpsolve(NumericMatrix x) {
         }
     }
     
-    lp_transbig_edit(
-                rcount, 
-                ccount, 
-                objective, 
-                solution);
+    lp_transbig_edit(rcount, ccount, objective, solution);
     
     // Convert into matrix
-    IntegerMatrix sol(rcount, ccount);
+    arma::Mat<int> sol(rcount, ccount);
     for (int i = 0; i < rcount; ++i) {
         for (int j = 0; j < ccount; ++j) {
             sol(i, j) = solution[(i*ccount) + j];
@@ -38,6 +35,7 @@ IntegerMatrix lpsolve(NumericMatrix x) {
     return sol;
 }   
 
+// Modified version of the function provided with lpSolve R package.
 void lp_transbig_edit (
               int r_count,           /* Number of rows             */
               int c_count,           /* Number of columns          */
