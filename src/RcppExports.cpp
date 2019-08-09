@@ -6,20 +6,20 @@
 
 using namespace Rcpp;
 
-// timesTwo
-NumericVector timesTwo(NumericVector x);
-RcppExport SEXP _bmmmcmc_timesTwo(SEXP xSEXP) {
+// lpsolve
+IntegerMatrix lpsolve(NumericMatrix x);
+RcppExport SEXP _bmmmcmc_lpsolve(SEXP xSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(timesTwo(x));
+    Rcpp::traits::input_parameter< NumericMatrix >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(lpsolve(x));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_bmmmcmc_timesTwo", (DL_FUNC) &_bmmmcmc_timesTwo, 1},
+    {"_bmmmcmc_lpsolve", (DL_FUNC) &_bmmmcmc_lpsolve, 1},
     {NULL, NULL, 0}
 };
 

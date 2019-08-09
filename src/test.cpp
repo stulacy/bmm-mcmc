@@ -4,35 +4,44 @@
 
 using namespace Rcpp;
 
-void lp_transbig_edit(int, int, double *, double *, int *, double *);
+void lp_transbig_edit(int, int, double *, double *);
 
 // [[Rcpp::export]]
-NumericVector timesTwo(NumericVector x) {
-    int rcount = 2;
-    int ccount = 2;
-    double objective[5] = {0, -1.267420, -1.267420, 2.074419, 2.074419};
-    double *objval = 0;
-    int integers[4] = {0, 0, 0, 0};
-    double solution[4] = {0.0, 0.0, 0.0, 0.0};
+IntegerMatrix lpsolve(NumericMatrix x) {
+    int rcount = x.nrow();
+    int ccount = x.ncol();
+    double objective[1+(rcount * ccount)];
+    double solution[rcount * ccount];
+    
+    objective[0] = 0;
+    for (int i = 0; i < rcount; ++i) {
+        for (int j = 0; j < rcount; ++j) {
+            objective[(i * ccount) + j + 1] = x(i, j);
+            solution[(i * ccount) + j] = 0;
+        }
+    }
     
     lp_transbig_edit(
                 rcount, 
                 ccount, 
                 objective, 
-                objval,
-                integers, 
                 solution);
     
-    Rcpp::Rcout << "Solution: " << solution << "\n";
-    return x * 2;
+    // Convert into matrix
+    IntegerMatrix sol(rcount, ccount);
+    for (int i = 0; i < rcount; ++i) {
+        for (int j = 0; j < ccount; ++j) {
+            sol(i, j) = solution[(i*ccount) + j];
+        }
+    }
+        
+    return sol;
 }   
 
 void lp_transbig_edit (
               int r_count,           /* Number of rows             */
               int c_count,           /* Number of columns          */
               double *costs,                  /* Objective function         */
-              double *obj_val,                /* Objective function value   */
-              int *integers,          /* Which vars. are integer?   */
               double *solution)               /* Result of call             */
 {
     long i;              /* Iteration variable       */
@@ -67,10 +76,7 @@ void lp_transbig_edit (
     // Minimising loss
     set_minim (lp);
     
-    /*
-    ** Add constraints. There are r_count row-type constraints, plus c_count
-    ** col_type constraints.
-    */
+    // Add constraints
     row_vals = (double *) calloc (cc, sizeof (double));
     col_inds = (int *) calloc (cc, sizeof (int));
     
@@ -112,15 +118,13 @@ void lp_transbig_edit (
     /*
     ** Set integers.
     */
-    for (i = 0; i < r_count * c_count; i++)
-        set_int (lp, integers[i], 1); /* Variable in ith element of integers */
+    for (i = 1; i <= (r_count * c_count); ++i)
+        set_int (lp, i, 1); /* Variable in ith element of integers */
     
     if (solve(lp) != 0) {
         return;
     }
-    
-    *obj_val = get_objective (lp);
-    get_variables (lp, solution);
+    get_variables(lp, solution);
     delete_lp (lp);
 }
 
