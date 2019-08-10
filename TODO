@@ -1,5 +1,4 @@
   - Fix label switching issue:
-    - Get Batch Stephens code working
     - Get Online Stephens code working
     - See if label switching reduced
   - Alternative to DP model with unknown K:

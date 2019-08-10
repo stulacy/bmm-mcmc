@@ -8,10 +8,13 @@ plot_alpha <- function(obj) {
         xlim(0, 5)
 }
 
-gibbs_dp <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, burnin=NULL, burnrelabel=50, debug=FALSE) {
+gibbs_dp <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, 
+                     burnin=NULL, burnrelabel=50, relabel_find_k=20, maxk_mult=1.3,
+                     debug=FALSE) {
     if (is.null(burnin)) burnin <- round(0.1 * nsamples)
     if (burnrelabel > burnin) burnrelabel <- round(0.1 * burnin)
-    collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, burnin, burnrelabel, debug)
+    collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, 
+                           burnin, burnrelabel, relabel_find_k, maxk_mult, debug)
 }
 
 gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, burnin=NULL, debug=FALSE) {

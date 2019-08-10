@@ -5,8 +5,8 @@ collapsed_gibbs_cpp <- function(df, initialK, nsamples, K, alpha, beta, gamma, b
     .Call(`_bmmmcmc_collapsed_gibbs_cpp`, df, initialK, nsamples, K, alpha, beta, gamma, burnin, debug)
 }
 
-collapsed_gibbs_dp_cpp <- function(df, nsamples, alpha, beta, gamma, a, b, burnin, burnrelabel, debug) {
-    .Call(`_bmmmcmc_collapsed_gibbs_dp_cpp`, df, nsamples, alpha, beta, gamma, a, b, burnin, burnrelabel, debug)
+collapsed_gibbs_dp_cpp <- function(df, nsamples, alpha, beta, gamma, a, b, burnin, burnrelabel, relabel_find_k, maxk_mult, debug) {
+    .Call(`_bmmmcmc_collapsed_gibbs_dp_cpp`, df, nsamples, alpha, beta, gamma, a, b, burnin, burnrelabel, relabel_find_k, maxk_mult, debug)
 }
 
 rdirichlet_cpp <- function(alpha_m) {

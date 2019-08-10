@@ -3,7 +3,7 @@
 using namespace Rcpp;
 
 // [[Rcpp::export]]
-arma::Mat<int> my_stephens_batch(arma::cube p, bool debug) {
+arma::mat my_stephens_batch(arma::cube p, bool debug) {
   
     int N = p.n_rows;
     int K = p.n_cols;
@@ -26,13 +26,13 @@ arma::Mat<int> my_stephens_batch(arma::cube p, bool debug) {
     int t = 0;
     arma::mat temp(N, K);
     arma::Mat<int> solution(K, K);
+  	arma::mat q(N, K);
     
     while((criterion > threshold) && (t < maxiter)) {
         if (debug) Rcout << "Iteration " << t << "\n";
       	t++;
       	
         //compute q matrix
-      	arma::mat q(N, K);
       	q.fill(0);
       	for (int k=0; k < K; ++k) {
       		for (int iter=0; iter < M; ++iter) {
@@ -71,5 +71,5 @@ arma::Mat<int> my_stephens_batch(arma::cube p, bool debug) {
     	criterion = abs(previous - current);
     	previous = current;
     }
-    return perm;
+    return q;
 }

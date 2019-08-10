@@ -32,6 +32,8 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                             double b,
                             int burnin,
                             int burnrelabel,
+                            int relabel_find_k,
+                            double maxk_mult,
                             bool debug) {
 
     // Setup int K giving current number of clusters, initialised to number of observations
@@ -39,7 +41,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
     int N = df_arma.n_rows;
     int P = df_arma.n_cols;
-    int K = N;
+    int K = 0;
     int curr_cluster;
 
     if (beta != gamma) {
@@ -55,12 +57,11 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     // a 1D vector of ints max size N, detailing the clusters that are in use
     // i.e. which indices of clusters are not empty
     std::vector<int> used_clusters;
-    //std::vector<int> unused_clusters;
     std::priority_queue<int, std::vector<int>, std::greater<int> > unused_clusters; 
     for (int i = 0; i < N; ++i) {
-        clusters[i] = std::vector<int> {i};
-        allocations(0, i) = i + 1;
-        used_clusters.push_back(i);
+        //clusters[i] = std::vector<int> {i};
+        //allocations(0, i) = i + 1;
+        unused_clusters.push(i);
     }
 
     if (debug) print_clusters(clusters);
@@ -69,14 +70,13 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     // due to use of symmetric priors on theta with Beta(beta, gamma) beta == gamma
     double RHS_newk = P * (log(beta) - log(beta + gamma));
     
-    int relabel_find_k = 50;
     int relabel_find_k_start = burnin - relabel_find_k;
 
     int xnd, sum_xd, Nk;
     double left, right, LHS, denom, logLH, max_prob, probs_newk;
 
     // And want to save probabilities and thetas
-    arma::cube thetas(K, P, nsamples, arma::fill::zeros);
+    arma::cube thetas(N, P, nsamples, arma::fill::zeros);
 
     std::vector <int> Ck;
     double b_eps, pi, pi1, pi2;
@@ -85,14 +85,15 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     double alpha_new, foobar, sumprob, left_denom;
     int maxK = 0;
     arma::cube probs_out;
+    arma::mat Q_init;
 
     for (int j=1; j < nsamples; ++j) {
         Rcout << "Sample " << j+1 << "\tK: " << K << "\n";
         
         
         if (j == burnin) {
-            Rcout << "Making probs_out with K: " << int(1.5*maxK) << "\n";
-            probs_out.zeros(N, int(1.5*maxK), burnrelabel);
+            Rcout << "Making probs_out with K: " << int(maxk_mult*maxK) << "\n";
+            probs_out.zeros(N, int(maxk_mult*maxK), burnrelabel);
         }
 
         // Constant value on denominator of left hand fraction updates with alpha each sample
@@ -103,25 +104,30 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
         probs_newk = log(alpha_sampled(j-1)) - left_denom + RHS_newk;
 
         for (int i = 0; i < N; ++i) {
-            // Drop person from current cluster
-            curr_cluster = allocations(j-1, i) - 1;
-            clusters[curr_cluster].erase(std::remove(clusters[curr_cluster].begin(),
-                                                     clusters[curr_cluster].end(),
-                                                     i),
-                                         clusters[curr_cluster].end());
-
-            // If this makes it empty, then remove it from list of used clusters and decrement K
-            if (clusters[curr_cluster].size() == 0) {
-                used_clusters.erase(std::remove(used_clusters.begin(),
-                                                used_clusters.end(),
-                                                curr_cluster),
-                                    used_clusters.end());
-                unused_clusters.push(curr_cluster);
-                K--;
+            
+            if (debug) Rcout << "Individual: " << i << "\n";
+            
+            if (j > 1) {
+                // Drop person from current cluster
+                curr_cluster = allocations(j-1, i) - 1;
+                clusters[curr_cluster].erase(std::remove(clusters[curr_cluster].begin(),
+                                                         clusters[curr_cluster].end(),
+                                                         i),
+                                             clusters[curr_cluster].end());
+    
+                // If this makes it empty, then remove it from list of used clusters and decrement K
+                if (clusters[curr_cluster].size() == 0) {
+                    used_clusters.erase(std::remove(used_clusters.begin(),
+                                                    used_clusters.end(),
+                                                    curr_cluster),
+                                        used_clusters.end());
+                    unused_clusters.push(curr_cluster);
+                    K--;
+                }
+    
+                if (debug) Rcout << "Dropped individual. K: " << K << "\tLength of used_clusters: " << used_clusters.size() << "\n";
             }
-
-            if (debug) Rcout << "Dropped individual. K: " << K << "\tLength of used_clusters: " << used_clusters.size() << "\n";
-
+    
             //print_clusters(clusters);
 
             // For k in 1:K calculate probabilities of being in k by use of the same equation as before
@@ -187,7 +193,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 if (K > maxK) maxK = K;
             }
             
-            if (j >= burnin && j < burnrelabel) {
+            if (j >= burnin && j < (burnin + burnrelabel)) {
                 for (int k=0; k <= K; ++k) {
                     probs_out(i, choices(k), j-burnin) = probs_norm(k);
                 }
@@ -200,7 +206,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
             // Sample z_i from it (using R's sample function rather than rmultinom)
             int ret = RcppArmadillo::sample(choices, 1, false, probs_norm)(0);
-            if (debug) Rcout << "Sample: " << ret << "\n";
+            if (debug) Rcout << "Sampled k: " << ret << "\n";
 
             // If z_i = K+1 then update list of used and unused clusters
             if (ret == new_cluster) {
@@ -229,6 +235,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
         }  // End for 1:N loop
     
         // Estimate thetas
+        if (debug) Rcout << "Estimating thetas\n";
         for (int k : used_clusters) {
             Ck = clusters[k];
             int Nk = Ck.size();
@@ -243,8 +250,8 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
         
         // Calculate Starting Q for online Stephens using Batch
         if (j == (burnin + burnrelabel)) {
-            arma::Mat<int> foo = my_stephens_batch(probs_out, false);
-            Rcout << "Foo: " << foo << "\n";
+            Q_init = my_stephens_batch(probs_out, false);
+            //Rcout << "Q: " << Q_init << "\n";
         }
         
     }  // End for 1:Nsamples loop
@@ -254,6 +261,8 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     out["z"] = allocations.tail_rows(nsamples-burnin);
     out["theta"] = thetas_post;
     out["alpha"] = alpha_sampled.tail(nsamples-burnin);
+    out["Qinit"] = Q_init;
+    out["initial_probs"] = probs_out;
     //arma::cube probs_post = probs_out.rows(burnin, nsamples-1);
     //out["probabilities"] = probs_post;
     return out;
