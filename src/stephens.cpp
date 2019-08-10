@@ -43,7 +43,7 @@ arma::Mat<int> my_stephens_batch(arma::cube p, bool debug) {
       	q /= M;
       	if (debug) Rcout << "q after sum" << q << "\n";
       	
-    arma::mat sub(N, K);
+        arma::mat sub(N, K);
     	
 		for (int iter=0; iter < M; ++iter) {
       	for (int k=0; k < K; ++k) {

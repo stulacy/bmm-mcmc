@@ -8,7 +8,7 @@
 #
 #df <- readRDS("data/K2_N100_P5_clean.rds")
 #df_2 <- readRDS("data/K2_N1000_P5_clean.rds")
-#df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
+df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
 #
 ## Form dataset that know what the first values should be
 ## N = 4, P = 3, K =2

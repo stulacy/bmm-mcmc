@@ -26,8 +26,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // collapsed_gibbs_dp_cpp
-List collapsed_gibbs_dp_cpp(IntegerMatrix df, int nsamples, double alpha, double beta, double gamma, double a, double b, int burnin, bool debug);
-RcppExport SEXP _bmmmcmc_collapsed_gibbs_dp_cpp(SEXP dfSEXP, SEXP nsamplesSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP gammaSEXP, SEXP aSEXP, SEXP bSEXP, SEXP burninSEXP, SEXP debugSEXP) {
+List collapsed_gibbs_dp_cpp(IntegerMatrix df, int nsamples, double alpha, double beta, double gamma, double a, double b, int burnin, int burnrelabel, bool debug);
+RcppExport SEXP _bmmmcmc_collapsed_gibbs_dp_cpp(SEXP dfSEXP, SEXP nsamplesSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP gammaSEXP, SEXP aSEXP, SEXP bSEXP, SEXP burninSEXP, SEXP burnrelabelSEXP, SEXP debugSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -39,8 +39,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type a(aSEXP);
     Rcpp::traits::input_parameter< double >::type b(bSEXP);
     Rcpp::traits::input_parameter< int >::type burnin(burninSEXP);
+    Rcpp::traits::input_parameter< int >::type burnrelabel(burnrelabelSEXP);
     Rcpp::traits::input_parameter< bool >::type debug(debugSEXP);
-    rcpp_result_gen = Rcpp::wrap(collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, burnin, debug));
+    rcpp_result_gen = Rcpp::wrap(collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, burnin, burnrelabel, debug));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -101,7 +102,7 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_bmmmcmc_collapsed_gibbs_cpp", (DL_FUNC) &_bmmmcmc_collapsed_gibbs_cpp, 9},
-    {"_bmmmcmc_collapsed_gibbs_dp_cpp", (DL_FUNC) &_bmmmcmc_collapsed_gibbs_dp_cpp, 9},
+    {"_bmmmcmc_collapsed_gibbs_dp_cpp", (DL_FUNC) &_bmmmcmc_collapsed_gibbs_dp_cpp, 10},
     {"_bmmmcmc_rdirichlet_cpp", (DL_FUNC) &_bmmmcmc_rdirichlet_cpp, 1},
     {"_bmmmcmc_gibbs_cpp", (DL_FUNC) &_bmmmcmc_gibbs_cpp, 10},
     {"_bmmmcmc_my_lpsolve", (DL_FUNC) &_bmmmcmc_my_lpsolve, 1},

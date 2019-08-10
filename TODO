@@ -1,6 +1,7 @@
   - Fix label switching issue:
-    - Find way of saving probabilities / cluster labels from DP model so can use relabelling strategies (K = N is too high).
-      Algorithm 3 of Stephens (2000b) is designed to be used online to reduce memory requirements
+    - Get Batch Stephens code working
+    - Get Online Stephens code working
+    - See if label switching reduced
   - Alternative to DP model with unknown K:
     - Try implementing Stick-breaking construction
     - Try allocation sampler (Nobile and Fearnside 2007, collapses out bernoulli parameters and cluster weights when conjugate priors are used)
