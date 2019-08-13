@@ -26,6 +26,9 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                             double alpha,
                             double beta,
                             double gamma,
+                            double a,
+                            double b,
+                            int burnin,
                             bool debug) {
 
     // Setup int K giving current number of clusters, initialised to number of observations
@@ -42,7 +45,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
     // Also want to save allocations along sampler
     arma::Mat<int> allocations(nsamples, N);
-
+    
     // Create 2D vector of cluster membership. Vector is K length with each entry being
     // 1D vector detailing the observations residing in that cluster
     std::vector< std::vector< int > > clusters(N);
@@ -60,21 +63,34 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
     // Can calculate probability of new cluster outside of loop as is constant
     // due to use of symmetric priors on theta with Beta(beta, gamma) beta == gamma
-    double LHS_newk = log(alpha) - log(N - 1 + alpha);
     double RHS_newk = P * (log(beta) - log(beta + gamma));
-    double dummy_newk = exp(LHS_newk + RHS_newk);
 
-    int xnd, sum_xd, k_ind, Nk;
-    double left, right, denom, full, dummy, probs_sum, LHS, logLH;
+    int xnd, sum_xd, Nk;
+    double left, right, LHS, denom, logLH, max_prob, probs_newk;
 
+    // And want to save probabilities and thetas
     arma::cube thetas(K, P, nsamples, arma::fill::zeros);
+    //arma::cube probs_out(nsamples, N, K, arma::fill::zeros);
+
     std::vector <int> Ck;
+    double b_eps, pi, pi1, pi2;
+    arma::vec alpha_sampled(nsamples);
+    alpha_sampled(0) = alpha;
+    double alpha_new, foobar, sumprob, left_denom;
 
     // At each sample, for each person:
     for (int j=1; j < nsamples; ++j) {
         Rcout << "Sample " << j+1 << "\tK: " << K << "\n";
+
+        // Constant value on denominator of left hand fraction updates with alpha each sample
+        left_denom = log(N - 1 + alpha_sampled(j-1));
+
+        // Probability of creating a new cluster using Eq 25 from Maartens only updates with each sample
+        // as we're using symmetrical prior on theta
+        probs_newk = log(alpha_sampled(j-1)) - left_denom + RHS_newk;
+
         for (int i = 0; i < N; ++i) {
-            // Drop that person from current cluster
+            // Drop person from current cluster
             curr_cluster = allocations(j-1, i) - 1;
             clusters[curr_cluster].erase(std::remove(clusters[curr_cluster].begin(),
                                                      clusters[curr_cluster].end(),
@@ -83,7 +99,6 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
             // If this makes it empty, then remove it from list of used clusters and decrement K
             if (clusters[curr_cluster].size() == 0) {
-
                 used_clusters.erase(std::remove(used_clusters.begin(),
                                                 used_clusters.end(),
                                                 curr_cluster),
@@ -102,17 +117,17 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             IntegerVector choices(K+1);
             NumericVector probs_norm(K+1);
 
-            probs_sum=0;
-            k_ind = 0;
             //if (debug) Rcout << "Calculating probabilities for known K\n";
-            for (int k : used_clusters) {
+            for (int k = 0; k < K; ++k) {
                 //if (debug) Rcout << "k: " << k << "\n";
-                Ck = clusters[k];
+                Ck = clusters[used_clusters[k]];
                 Nk = Ck.size();
-                LHS = log(Nk) - log(N - 1 + alpha);
+                if (Nk == 0) Rcout << "Nk of 0!!!!\n";
+                LHS = log(Nk) - left_denom;
                 //if (debug) Rcout << "Nk: " << Nk << "\n";
                 //if (debug) Rcout << "LHS: " << LHS << "\n";
                 logLH = 0;
+                denom = log(beta + gamma + Nk);
                 for (int d=0; d < P; ++d) {
                     //if (debug) Rcout << "d: " << d << "\n";
                     sum_xd = 0;
@@ -123,52 +138,37 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                     xnd = df_arma(i, d);
                     left = xnd * log(beta + sum_xd);
                     right = (1-xnd) * log(gamma + Nk - sum_xd);
-                    denom = log(beta + gamma + Nk);
-                    full = left + right - denom;
-
-                    //if (debug) Rcout << "sum_xd: " << sum_xd << "\n";
-                    //if (debug) Rcout << "left: " << left << "\n";
-                    //if (debug) Rcout << "right: " << right << "\n";
-                    //if (debug) Rcout << "denom: " << denom << "\n";
-                    //if (debug) Rcout << "full: " << full << "\n";
-
-                    logLH += full;
+                    logLH += left + right - denom;
                 }
-                dummy = exp(LHS + logLH);
-                probs_sum += dummy;
-                //if (debug) Rcout << "dummy: " << dummy << "\n";
-                probs(k_ind) = dummy;
-                k_ind++;
+                probs(k) = LHS + logLH;
+                choices(k) = used_clusters[k];
             }
 
-            // Add on probability of creating a new cluster using Eq 25 from Maartens
-            probs_sum += dummy_newk;
-            probs(K) = dummy_newk;
-
-            //if (debug) {
-            //    Rcout << "Raw probs: \t";
-            //    for (auto it : probs) {
-            //        Rcout << it << " ";
-            //    }
-            //    Rcout << "\n ";
-            //}
-
-            // Normalise and form K+1 cluster labels to sample from
-            k_ind = 0;
-            for (int k : used_clusters) {
-                choices(k_ind) = k;
-                probs_norm(k_ind) = probs(k_ind) / probs_sum;
-                k_ind++;
-            }
             // Add on probability and label for new K, which will label as an unused
             // cluster in the N dimensions, and hence is available
             if (unused_clusters.size() == 0) {
                 Rcpp::stop("Error: have no free clusters, need to create one.");
             }
             int new_cluster = unused_clusters.back();
-
-            probs_norm(K) = probs(K) / probs_sum;
             choices(K) = new_cluster;
+            probs(K) = probs_newk;
+
+            // Calculate exponentiated probs using exponentiate-normalise trick
+            max_prob = max(probs);
+            if (debug) Rcout << "Max prob: " << max_prob << "\n";
+            sumprob=0;
+            for (int k = 0; k <= K; ++k) {
+                foobar = exp(probs(k) - max_prob);
+                probs_norm(k) = foobar;
+                sumprob += foobar;
+            }
+
+            // Finish softmax exp-normalise 
+            for (int k=0; k <= K; ++k) {
+                probs_norm(k) /= sumprob;
+                // Saving probabilities so can relabel afterwards
+                //probs_out(j, i, choices(k)) = probs_norm(k);
+            }
 
             //if (debug) Rcout << "probs_sum: " << probs_sum << "\n";
             if (debug) Rcout << "Raw probs (" << probs.size() << ") :" << probs << "\n";
@@ -189,6 +189,19 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             clusters[ret].push_back(i);
             allocations(j, i) = ret + 1;
             if (debug) Rcout << "After sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
+
+        // Sample alpha from Gamma(a, b) using method described by Escobar and West
+        // in Section 6
+        // https://pdfs.semanticscholar.org/df25/adb36860c1ad9edaac04b8855a2f19e79c5b.pdf
+        b_eps = b - log(R::rbeta(alpha_sampled(j-1)+1, N));
+        pi1 = a + K - 1;
+        pi2 = N * b_eps;
+        pi = pi1 / (pi1 + pi2);
+
+        alpha_new = pi * R::rgamma(a+K, 1/(b_eps)) + (1-pi) * R::rgamma(a+K-1, 1/(b_eps));
+
+        if (debug) Rcout << "b-log(epsilon): " << b_eps << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
+        alpha_sampled(j) = alpha_new;
         }
 
         // Estimate thetas
@@ -200,14 +213,20 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 for (int c : Ck) {
                     dsum += df_arma(c, d);
                 }
-                if (debug) Rcout << "Theta k: " << k << "\td: " << d << "\tdsum: " << dsum << "\tNk: " << Nk << "\tdsum / NK: " << dsum / (double)Nk << "\n";
                 thetas(k, d, j) = dsum / (double)Nk;
             }
         }
+
+
     }
+    
     List out;
-    out["z"] = allocations;
-    out["theta"] = thetas;
+    arma::cube thetas_post = thetas.tail_slices(nsamples - burnin);
+    out["z"] = allocations.tail_rows(nsamples-burnin);
+    out["theta"] = thetas_post;
+    out["alpha"] = alpha_sampled.tail(nsamples-burnin);
+    //arma::cube probs_post = probs_out.rows(burnin, nsamples-1);
+    //out["probabilities"] = probs_post;
     return out;
 }
 

@@ -1,4 +1,7 @@
-  - Fix issue with label switching in DP sampling
-  - Speed up collapsed Gibbs - try going back to non-vectorised method?
+  - Fix label switching issue:
+    - Find way of saving probabilities / cluster labels from DP model so can use relabelling strategies (K = N is too high)
+  - Alternative to DP model with unknown K:
+    - Try allocation sampler (Nobile and Fearnside 2007, collapses out bernoulli parameters and cluster weights when conjugate priors are used)
+    - Try RJMCMC sampler (more general than allocation, samples all parameters. Richardson and Green 1997)
+  - Incorporate redundant features into likelihood (look up White 2016)
   - Implement predictive distribution
-  - Incorporate redundant features into likelihood
