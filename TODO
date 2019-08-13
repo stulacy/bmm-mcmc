@@ -1,6 +1,3 @@
-  - Fix label switching issue:
-    - Get Online Stephens code returning both Q and Perms
-    - See if label switching reduced
   - Alternative to DP model with unknown K:
     - Try implementing Stick-breaking construction
     - Try allocation sampler (Nobile and Fearnside 2007, collapses out bernoulli parameters and cluster weights when conjugate priors are used)

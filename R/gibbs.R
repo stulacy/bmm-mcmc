@@ -236,7 +236,8 @@
 #head(foo$permutations[9000, ][foo$z[9000, ]], 30)
 #
 #
-#foo <- gibbs_dp(df_3, nsamples=1000, burnin=100, burnrelabel=100, relabel=TRUE)
+#data("K2_N100_P5")
+#foo <- gibbs_dp(K2_N100_P5, nsamples=1000, burnin=100, burnrelabel=100, relabel=TRUE)
 #
 ## Plot thetas
 ## Original

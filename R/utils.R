@@ -1,25 +1,61 @@
-#' @importFrom magrittr %>%
-plot_alpha <- function(obj) {
-    ggplot2::ggplot(data.frame(foo=obj$alpha), ggplot2::aes(foo)) +
-        ggplot2::geom_histogram(binwidth = 0.1, colour="black", fill="white") +
-        ggplot2::xlim(0, 5)
-}
-
-gibbs_dp <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, 
+#' Collapsed Gibbs sampler for infinite Bernoulli Mixture Model
+#' 
+#' Samples from the Dirichlet Process prior infinite BMM using
+#' the Chinese Restaurant Process formulation
+#' 
+#' @inheritParams gibbs_full
+#' @param a First Gamma parameter on prior on Alpha
+#' @param b Second Gamma parameter on prior on Alpha
+#' @param alpha Starting value of alpha
+#' @param relabel Whether to apply Stephens 2000b relabelling method
+#' @param burnrelabel If \code{relabel} is set then this parameter controls
+#'   how many samples (from the end of the burnin period) are used for
+#'   the initial batch run of Stephens' algorithm. Following this, the 
+#'   online implementation is applied at each sample.
+#' @param maxK Maximum number of clusters to assume. Reduces computational storage
+#'   requirements.
+#'   
+#' @return A list with sampled components z, theta, alpha.
+#'   If \code{relabel} is set then it also returns permutations,
+#'   z_relabelled, and theta_relabelled
+#'  
+#' @export
+gibbs_dp <- function(data, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, 
                      burnin=NULL, relabel=TRUE, burnrelabel=50, maxK=30, debug=FALSE) {
     if (is.null(burnin)) burnin <- round(0.1 * nsamples)
     if (burnrelabel > burnin) burnrelabel <- round(0.1 * burnin)
-    collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, 
+    collapsed_gibbs_dp_cpp(data, nsamples, alpha, beta, gamma, a, b, 
                            burnin, relabel, burnrelabel, maxK, debug)
 }
 
-gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, burnin=NULL, debug=FALSE) {
+#' Collapsed Gibbs sampler for finite Bernoulli Mixture Model
+#' 
+#' @inheritParams gibbs_full
+#' @return A list with sampled values z and theta.
+#' @export
+gibbs_collapsed <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5, 
+                            burnin=NULL, debug=FALSE) {
     if (is.null(burnin)) burnin <- round(0.1 * nsamples)
-    initial_K <- sample(1:K, nrow(df), replace=T)
-    collapsed_gibbs_cpp(df, initial_K,
+    initial_K <- sample(1:K, nrow(data), replace=T)
+    collapsed_gibbs_cpp(data, initial_K,
                         nsamples, K, alpha, beta, gamma, burnin, debug)
 }
 
+#' Full Gibbs sampler for finite Bernoulli Mixture Model
+#' 
+#' @param data Data frame or matrix with observations in rows and binary
+#'   variables in columns
+#' @param nsamples Number of samples to take
+#' @param K Number of mixtures
+#' @param alpha Concentration parameter
+#' @param beta First Beta parameter on prior used for all Bernoulli
+#'   variables across all components
+#' @param gamma Second Beta parameter on prior used for all Bernoulli
+#'   variables across all components
+#' @param burnin Number of samples to discard at start of chain
+#' @param debug Whether to display debug messages.
+#' @return A list with sampled values pi, z, and theta.
+#' @export
 gibbs_full <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
                        burnin=NULL, debug=FALSE) {
     if (is.null(burnin)) burnin <- round(0.1 * nsamples)
@@ -32,6 +68,11 @@ gibbs_full <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
               nsamples, K, alpha, beta, gamma, burnin, debug)
 }
 
+#' Plots samples from Bernoulli mixture models
+#' 
+#' @importFrom magrittr "%>%"
+#' @importFrom Rcpp evalCpp
+#' @export
 plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_threshold=0.1,
                        cluster_labels=NULL, theta_labels=NULL, theta_to_display=NULL) {
 
@@ -127,4 +168,10 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_
         plts[[length(plts) + 1]] <- plt_theta
     }
     gridExtra::grid.arrange(gridExtra::arrangeGrob(grobs=plts, ncol=1, heights=heights))
+}
+
+plot_alpha <- function(obj) {
+    ggplot2::ggplot(data.frame(foo=obj$alpha), ggplot2::aes(foo)) +
+        ggplot2::geom_histogram(binwidth = 0.1, colour="black", fill="white") +
+        ggplot2::xlim(0, 5)
 }

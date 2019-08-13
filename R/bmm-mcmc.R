@@ -1,8 +1,9 @@
-#' bmm-mcmc.
+#' bmmmcmc.
 #' 
 #' Package to sample from Bayesian Bernoulli Mixture Models
 #'
-#' @name bmm-mcmc
+#' @name bmmmcmc
+#' @useDynLib bmmmcmc
 #' @docType package
 NULL
 
