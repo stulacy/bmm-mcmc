@@ -31,9 +31,9 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                             double a,
                             double b,
                             int burnin,
+                            bool relabel,
                             int burnrelabel,
-                            int relabel_find_k,
-                            double maxk_mult,
+                            int maxK,
                             bool debug) {
 
     // Setup int K giving current number of clusters, initialised to number of observations
@@ -50,17 +50,16 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
 
     // Also want to save allocations along sampler
     arma::Mat<int> allocations(nsamples, N);
+    arma::Mat<int> allocations_relabelled(nsamples, N);
     
     // Create 2D vector of cluster membership. Vector is K length with each entry being
     // 1D vector detailing the observations residing in that cluster
-    std::vector< std::vector< int > > clusters(N);
+    std::vector< std::vector< int > > clusters(maxK);
     // a 1D vector of ints max size N, detailing the clusters that are in use
     // i.e. which indices of clusters are not empty
     std::vector<int> used_clusters;
     std::priority_queue<int, std::vector<int>, std::greater<int> > unused_clusters; 
     for (int i = 0; i < N; ++i) {
-        //clusters[i] = std::vector<int> {i};
-        //allocations(0, i) = i + 1;
         unused_clusters.push(i);
     }
 
@@ -70,31 +69,27 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     // due to use of symmetric priors on theta with Beta(beta, gamma) beta == gamma
     double RHS_newk = P * (log(beta) - log(beta + gamma));
     
-    int relabel_find_k_start = burnin - relabel_find_k;
-
-    int xnd, sum_xd, Nk;
+    int xnd, sum_xd, Nk, smallest_cluster, smallest_size, this_cluster_size;
     double left, right, LHS, denom, logLH, max_prob, probs_newk;
 
     // And want to save probabilities and thetas
-    arma::cube thetas(N, P, nsamples, arma::fill::zeros);
+    arma::cube thetas(maxK, P, nsamples, arma::fill::zeros);
+    arma::cube thetas_relab(maxK, P, nsamples, arma::fill::zeros);
 
     std::vector <int> Ck;
     double b_eps, pi, pi1, pi2;
     arma::vec alpha_sampled(nsamples);
     alpha_sampled(0) = alpha;
     double alpha_new, foobar, sumprob, left_denom;
-    int maxK = 0;
-    arma::cube probs_out;
-    arma::mat Q_init;
-
+    arma::cube probs_out(N, maxK, burnrelabel, arma::fill::zeros);
+    arma::mat probs_sample(N, maxK, arma::fill::zeros);
+    arma::mat Q;
+    std::pair<arma::Row<int>, arma::mat> stephens_out;
+    arma::Row<int> permutations_sample(maxK);
+    arma::Mat<int> permutations(nsamples - burnin, maxK);
+        
     for (int j=1; j < nsamples; ++j) {
         Rcout << "Sample " << j+1 << "\tK: " << K << "\n";
-        
-        
-        if (j == burnin) {
-            Rcout << "Making probs_out with K: " << int(maxk_mult*maxK) << "\n";
-            probs_out.zeros(N, int(maxk_mult*maxK), burnrelabel);
-        }
 
         // Constant value on denominator of left hand fraction updates with alpha each sample
         left_denom = log(N - 1 + alpha_sampled(j-1));
@@ -128,8 +123,6 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 if (debug) Rcout << "Dropped individual. K: " << K << "\tLength of used_clusters: " << used_clusters.size() << "\n";
             }
     
-            //print_clusters(clusters);
-
             // For k in 1:K calculate probabilities of being in k by use of the same equation as before
             // Firstly identify set of patients in this cluster
             NumericVector probs(K+1);
@@ -141,10 +134,8 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
                 //if (debug) Rcout << "k: " << k << "\n";
                 Ck = clusters[used_clusters[k]];
                 Nk = Ck.size();
-                if (Nk == 0) Rcout << "Nk of 0!!!!\n";
+                if (Nk == 0) Rcout << "Something's gone wrong... Nk of 0!\n";
                 LHS = log(Nk) - left_denom;
-                //if (debug) Rcout << "Nk: " << Nk << "\n";
-                //if (debug) Rcout << "LHS: " << LHS << "\n";
                 logLH = 0;
                 denom = log(beta + gamma + Nk);
                 for (int d=0; d < P; ++d) {
@@ -189,17 +180,18 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             
             // Save initial probabilities so can do batch Stephens
             // to generate initial Q
-            if (j >= relabel_find_k_start && j < burnin) {
-                if (K > maxK) maxK = K;
-            }
-            
-            if (j >= burnin && j < (burnin + burnrelabel)) {
-                for (int k=0; k <= K; ++k) {
-                    probs_out(i, choices(k), j-burnin) = probs_norm(k);
+            if (relabel) {
+                if (j < burnin && j >= (burnin - burnrelabel)) {
+                    for (int k=0; k <= K; ++k) {
+                        probs_out(i, choices(k), j - burnin + burnrelabel) = probs_norm(k);
+                    }
+                } else if (j >= burnin) {
+                    for (int k=0; k <= K; ++k) {
+                        probs_sample(i, choices(k)) = probs_norm(k);
+                    }
                 }
             }
             
-            //if (debug) Rcout << "probs_sum: " << probs_sum << "\n";
             if (debug) Rcout << "Raw probs (" << probs.size() << ") :" << probs << "\n";
             if (debug) Rcout << "Normalised probs (" << probs_norm.size() << ") :" << probs_norm << "\n";
             if (debug) Rcout << "Sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
@@ -209,11 +201,26 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             if (debug) Rcout << "Sampled k: " << ret << "\n";
 
             // If z_i = K+1 then update list of used and unused clusters
+            // But truncate if have enough clusters and add to smallest cluster
             if (ret == new_cluster) {
-                if (debug) Rcout << "Have created new cluster\n";
-                unused_clusters.pop();
-                used_clusters.push_back(new_cluster);
-                K++;
+                if (K < (maxK - 1)) {
+                    if (debug) Rcout << "Have created new cluster\n";
+                    unused_clusters.pop();
+                    used_clusters.push_back(new_cluster);
+                    K++;
+                } else {
+                    if (debug) Rcout << "Already at max K limit so will not create cluster\n";
+                    smallest_cluster=0;
+                    smallest_size = N+1;
+                    for (int k = 0; k < K; ++k) {
+                        this_cluster_size = clusters[used_clusters[k]].size();
+                        if (this_cluster_size < smallest_size) {
+                            smallest_size = this_cluster_size;
+                            smallest_cluster = k;
+                        }
+                        ret = smallest_cluster;
+                    }
+                }
             }
             clusters[ret].push_back(i);
             allocations(j, i) = ret + 1;
@@ -226,45 +233,65 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             pi1 = a + K - 1;
             pi2 = N * b_eps;
             pi = pi1 / (pi1 + pi2);
-    
             alpha_new = pi * R::rgamma(a+K, 1/(b_eps)) + (1-pi) * R::rgamma(a+K-1, 1/(b_eps));
     
             if (debug) Rcout << "b-log(epsilon): " << b_eps << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
             alpha_sampled(j) = alpha_new;
             
         }  // End for 1:N loop
-    
+        
+        // To relabel clusters use Stephen's 2000b online algorithm.
+        // Firstly need to initialise Q with values taken from a batch formulation
+        // over $burnrelabel samples
+        if (relabel) {
+            if (j == (burnin - 1)) {
+                Rcout << "Running Stephens Batch relabelling to identify initial Q values\n";
+                Q = my_stephens_batch(probs_out, false);
+            } else if (j >= burnin) {
+                stephens_out = my_stephens_online(Q, probs_sample, j, false);
+                Q = stephens_out.second;
+                permutations_sample = stephens_out.first;
+                // Relabel Z 
+                permutations.row(j-burnin) = permutations_sample;
+                for (int i = 0; i < N; ++i) {
+                    allocations_relabelled(j, i) = permutations_sample(allocations(j, i) - 1) + 1;
+                }
+            }
+        }
+        
         // Estimate thetas
         if (debug) Rcout << "Estimating thetas\n";
+        int cluster_index;
         for (int k : used_clusters) {
             Ck = clusters[k];
             int Nk = Ck.size();
+            
             for (int d=0; d < P; ++d) {
                 int dsum = 0;
                 for (int c : Ck) {
                     dsum += df_arma(c, d);
                 }
                 thetas(k, d, j) = dsum / (double)Nk;
+                
+                if (relabel && j >= burnin) {
+                    thetas_relab(permutations_sample(k), d, j) = dsum / (double)Nk;
+                }
             }
-        }
-        
-        // Calculate Starting Q for online Stephens using Batch
-        if (j == (burnin + burnrelabel)) {
-            Q_init = my_stephens_batch(probs_out, false);
-            //Rcout << "Q: " << Q_init << "\n";
         }
         
     }  // End for 1:Nsamples loop
     
     List out;
     arma::cube thetas_post = thetas.tail_slices(nsamples - burnin);
+    arma::cube thetas_relabelled = thetas_relab.tail_slices(nsamples - burnin);
+    if (relabel) {
+        out["z_relabelled"] = allocations_relabelled.tail_rows(nsamples-burnin);
+        out["theta_relabelled"] = thetas_relabelled;
+    }
     out["z"] = allocations.tail_rows(nsamples-burnin);
     out["theta"] = thetas_post;
     out["alpha"] = alpha_sampled.tail(nsamples-burnin);
-    out["Qinit"] = Q_init;
-    out["initial_probs"] = probs_out;
-    //arma::cube probs_post = probs_out.rows(burnin, nsamples-1);
-    //out["probabilities"] = probs_post;
+    out["permutations"] = permutations;
     return out;
 }
 

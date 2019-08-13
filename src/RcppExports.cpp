@@ -26,8 +26,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // collapsed_gibbs_dp_cpp
-List collapsed_gibbs_dp_cpp(IntegerMatrix df, int nsamples, double alpha, double beta, double gamma, double a, double b, int burnin, int burnrelabel, int relabel_find_k, double maxk_mult, bool debug);
-RcppExport SEXP _bmmmcmc_collapsed_gibbs_dp_cpp(SEXP dfSEXP, SEXP nsamplesSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP gammaSEXP, SEXP aSEXP, SEXP bSEXP, SEXP burninSEXP, SEXP burnrelabelSEXP, SEXP relabel_find_kSEXP, SEXP maxk_multSEXP, SEXP debugSEXP) {
+List collapsed_gibbs_dp_cpp(IntegerMatrix df, int nsamples, double alpha, double beta, double gamma, double a, double b, int burnin, bool relabel, int burnrelabel, int maxK, bool debug);
+RcppExport SEXP _bmmmcmc_collapsed_gibbs_dp_cpp(SEXP dfSEXP, SEXP nsamplesSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP gammaSEXP, SEXP aSEXP, SEXP bSEXP, SEXP burninSEXP, SEXP relabelSEXP, SEXP burnrelabelSEXP, SEXP maxKSEXP, SEXP debugSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -39,11 +39,11 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type a(aSEXP);
     Rcpp::traits::input_parameter< double >::type b(bSEXP);
     Rcpp::traits::input_parameter< int >::type burnin(burninSEXP);
+    Rcpp::traits::input_parameter< bool >::type relabel(relabelSEXP);
     Rcpp::traits::input_parameter< int >::type burnrelabel(burnrelabelSEXP);
-    Rcpp::traits::input_parameter< int >::type relabel_find_k(relabel_find_kSEXP);
-    Rcpp::traits::input_parameter< double >::type maxk_mult(maxk_multSEXP);
+    Rcpp::traits::input_parameter< int >::type maxK(maxKSEXP);
     Rcpp::traits::input_parameter< bool >::type debug(debugSEXP);
-    rcpp_result_gen = Rcpp::wrap(collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, burnin, burnrelabel, relabel_find_k, maxk_mult, debug));
+    rcpp_result_gen = Rcpp::wrap(collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, burnin, relabel, burnrelabel, maxK, debug));
     return rcpp_result_gen;
 END_RCPP
 }

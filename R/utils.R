@@ -1,20 +1,15 @@
-#Rcpp::sourceCpp('src/collapsed_gibbs_dp.cpp')
-#Rcpp::sourceCpp('src/collapsed_gibbs.cpp')
-#Rcpp::sourceCpp('src/full_gibbs.cpp')
-
 plot_alpha <- function(obj) {
-    ggplot(data.frame(foo=obj$alpha), aes(foo)) +
-        geom_histogram(binwidth = 0.1, colour="black", fill="white") +
-        xlim(0, 5)
+    ggplot2::ggplot(data.frame(foo=obj$alpha), ggplot2::aes(foo)) +
+        ggplot2::geom_histogram(binwidth = 0.1, colour="black", fill="white") +
+        ggplot2::xlim(0, 5)
 }
 
 gibbs_dp <- function(df, nsamples, a=1, b=1, alpha=1, beta=0.5, gamma=0.5, 
-                     burnin=NULL, burnrelabel=50, relabel_find_k=20, maxk_mult=1.3,
-                     debug=FALSE) {
+                     burnin=NULL, relabel=TRUE, burnrelabel=50, maxK=30, debug=FALSE) {
     if (is.null(burnin)) burnin <- round(0.1 * nsamples)
     if (burnrelabel > burnin) burnrelabel <- round(0.1 * burnin)
     collapsed_gibbs_dp_cpp(df, nsamples, alpha, beta, gamma, a, b, 
-                           burnin, burnrelabel, relabel_find_k, maxk_mult, debug)
+                           burnin, relabel, burnrelabel, maxK, debug)
 }
 
 gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, burnin=NULL, debug=FALSE) {
@@ -60,11 +55,11 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_
         pi_long <- as.data.frame.table(pi, responseName="value")
 
         plt_pi <- pi_long %>%
-            ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
-                geom_line() +
-                theme_bw() +
-                labs(x="Sample", y="Pi") +
-                scale_colour_discrete("Cluster")
+            ggplot2::ggplot(ggplot2::aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
+                ggplot2::geom_line() +
+                ggplot2::theme_bw() +
+                ggplot2::labs(x="Sample", y="Pi") +
+                ggplot2::scale_colour_discrete("Cluster")
         plts[[length(plts) + 1]] <- plt_pi
     }
 
@@ -74,27 +69,27 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_
         }
         dimnames(z_raw) <- list('sample'=1:S, 'observation'=1:N)
         z_long <- as.data.frame.table(z_raw, responseName="cluster") %>%
-                    mutate(cluster = factor(cluster, levels=1:K, labels=cluster_labels))
+                    dplyr::mutate(cluster = factor(cluster, levels=1:K, labels=cluster_labels))
 
         z_props <- z_long %>%
-            filter(sample != 1) %>%
-            group_by(sample, cluster) %>%
-            summarise(n = n()) %>%
-            mutate(prop = n / sum(n))
+            dplyr::filter(sample != 1) %>%
+            dplyr::group_by(sample, cluster) %>%
+            dplyr::summarise(n = n()) %>%
+            dplyr::mutate(prop = n / sum(n))
 
         cluster_to_plot <- z_props %>%
-            filter(prop > cluster_threshold) %>%
-            distinct(sample, cluster)
+            dplyr::filter(prop > cluster_threshold) %>%
+            dplyr::distinct(sample, cluster)
         unique_clusters <- unique(cluster_to_plot$cluster)
 
         plt_z <- z_props %>%
-            mutate(cluster = factor(cluster, levels=unique_clusters)) %>%
-            ggplot(aes(x=as.integer(sample), y=prop, colour=cluster)) +
-                geom_line() +
-                theme_bw() +
-                ylim(0, 1) +
-                labs(x="Sample", y="Proportion in cluster") +
-                scale_colour_discrete("Cluster", guide=F, drop=F)
+            dplyr::mutate(cluster = factor(cluster, levels=unique_clusters)) %>%
+            gglot2::ggplot(gglot2::aes(x=as.integer(sample), y=prop, colour=cluster)) +
+                gglot2::geom_line() +
+                gglot2::theme_bw() +
+                gglot2::ylim(0, 1) +
+                gglot2::labs(x="Sample", y="Proportion in cluster") +
+                gglot2::scale_colour_discrete("Cluster", guide=F, drop=F)
         plts[[length(plts) + 1]] <- plt_z
     }
 
@@ -107,28 +102,28 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_
         }
         dimnames(theta_raw) <- list('cluster'=cluster_labels, 'theta_var'=theta_labels, 'sample'=1:S)
         theta_long <- as.data.frame.table(theta_raw, responseName = "value") %>%
-                        mutate(cluster = factor(cluster, levels=cluster_labels),
+                        dplyr::mutate(cluster = factor(cluster, levels=cluster_labels),
                                theta_var = factor(theta_var, levels=theta_labels))
 
         if (!is.null(theta_to_display)) {
             theta_long <- theta_long %>%
-                            filter(theta_var %in% theta_to_display) %>%
-                            mutate(theta_var = factor(theta_var, levels=theta_to_display))
+                        dplyr::filter(theta_var %in% theta_to_display) %>%
+                        dplyr::mutate(theta_var = factor(theta_var, levels=theta_to_display))
         }
 
         foo <- cluster_to_plot %>%
-            left_join(theta_long, by=c('cluster'='cluster', 'sample'='sample'))
+            dplyr::left_join(theta_long, by=c('cluster'='cluster', 'sample'='sample'))
         plt_theta <- foo %>%
-            filter(sample != 1) %>%
-            mutate(cluster = factor(cluster, levels=unique_clusters)) %>%
-            ggplot(aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
-                geom_line() +
-                facet_wrap(~theta_var) +
-                theme_bw() +
-                ylim(0, 1) +
-                labs(x="Sample", y="Theta") +
-                scale_colour_discrete("Cluster", guide=F, drop=F)
+            dplyr::filter(sample != 1) %>%
+            dplyr::mutate(cluster = factor(cluster, levels=unique_clusters)) %>%
+            ggplot2::ggplot(ggplot2::aes(x=as.integer(sample), y=value, colour=as.factor(cluster))) +
+                ggplot2::geom_line() +
+                ggplot2::facet_wrap(~theta_var) +
+                ggplot2::theme_bw() +
+                ggplot2::ylim(0, 1) +
+                ggplot2::labs(x="Sample", y="Theta") +
+                ggplot2::scale_colour_discrete("Cluster", guide=F, drop=F)
         plts[[length(plts) + 1]] <- plt_theta
     }
-    grid.arrange(arrangeGrob(grobs=plts, ncol=1, heights=heights))
+    gridExtra::grid.arrange(gridExtra::arrangeGrob(grobs=plts, ncol=1, heights=heights))
 }
