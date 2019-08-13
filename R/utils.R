@@ -1,3 +1,4 @@
+#' @importFrom magrittr %>%
 plot_alpha <- function(obj) {
     ggplot2::ggplot(data.frame(foo=obj$alpha), ggplot2::aes(foo)) +
         ggplot2::geom_histogram(binwidth = 0.1, colour="black", fill="white") +
@@ -22,11 +23,11 @@ gibbs_collapsed <- function(df, nsamples, K, alpha=1, beta=0.5, gamma=0.5, burni
 gibbs_full <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
                        burnin=NULL, debug=FALSE) {
     if (is.null(burnin)) burnin <- round(0.1 * nsamples)
-    initial_pi <- runif(K)
+    initial_pi <- stats::runif(K)
     initial_pi <- exp(initial_pi)
     initial_pi <- initial_pi / sum(initial_pi)
 
-    initial_theta <- matrix(runif(K*ncol(data)), ncol=ncol(data), nrow=K)
+    initial_theta <- matrix(stats::runif(K*ncol(data)), ncol=ncol(data), nrow=K)
     gibbs_cpp(data, initial_pi, initial_theta,
               nsamples, K, alpha, beta, gamma, burnin, debug)
 }
@@ -84,12 +85,12 @@ plot_gibbs <- function(obj, theta=TRUE, z=TRUE, pi=FALSE, heights=NULL, cluster_
 
         plt_z <- z_props %>%
             dplyr::mutate(cluster = factor(cluster, levels=unique_clusters)) %>%
-            gglot2::ggplot(gglot2::aes(x=as.integer(sample), y=prop, colour=cluster)) +
-                gglot2::geom_line() +
-                gglot2::theme_bw() +
-                gglot2::ylim(0, 1) +
-                gglot2::labs(x="Sample", y="Proportion in cluster") +
-                gglot2::scale_colour_discrete("Cluster", guide=F, drop=F)
+            ggplot2::ggplot(ggplot2::aes(x=as.integer(sample), y=prop, colour=cluster)) +
+                ggplot2::geom_line() +
+                ggplot2::theme_bw() +
+                ggplot2::ylim(0, 1) +
+                ggplot2::labs(x="Sample", y="Proportion in cluster") +
+                ggplot2::scale_colour_discrete("Cluster", guide=F, drop=F)
         plts[[length(plts) + 1]] <- plt_z
     }
 

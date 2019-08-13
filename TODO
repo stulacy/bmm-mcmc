@@ -1,5 +1,5 @@
   - Fix label switching issue:
-    - Get Online Stephens code working
+    - Get Online Stephens code returning both Q and Perms
     - See if label switching reduced
   - Alternative to DP model with unknown K:
     - Try implementing Stick-breaking construction

@@ -8,7 +8,7 @@
 #
 #df <- readRDS("data/K2_N100_P5_clean.rds")
 #df_2 <- readRDS("data/K2_N1000_P5_clean.rds")
-df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
+#df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
 #
 ## Form dataset that know what the first values should be
 ## N = 4, P = 3, K =2
@@ -151,3 +151,118 @@ df_3 <- readRDS("data/K3_N1000_P5_clean.rds")
 #plot_gibbs(reorder_clusters(samples_label, labs_ecr1$permutations))
 #plot_gibbs(reorder_clusters(samples_label, labs_ecr2$permutations))
 #
+
+#### Practicing label switching
+#foo <- gibbs_dp(df_3, nsamples = 10000, maxK=20, burnin = 1000, burnrelabel = 300, debug=F)
+### Getting massive oddities in thetas
+#plot_gibbs(foo, cluster_threshold=0.2)
+##
+### Let's manually look at zs
+#z_raw <- foo$z
+#K <- 20
+#N <- 1000
+#S <- 9000
+#cluster_labels <- 1:K
+#dimnames(z_raw) <- list('sample'=1:S, 'observation'=1:N)
+#z_long <- as.data.frame.table(z_raw, responseName="cluster") %>%
+#            mutate(cluster = factor(cluster, levels=1:K, labels=cluster_labels))
+#
+#z_props <- z_long %>%
+#    filter(sample != 1) %>%
+#    group_by(sample, cluster) %>%
+#    summarise(n = n()) %>%
+#    mutate(prop = n / sum(n))
+#
+#cluster_to_plot <- z_props %>%
+#    filter(prop > 0.2) %>%
+#    distinct(sample, cluster)
+#unique_clusters <- unique(cluster_to_plot$cluster)
+#
+#plt_z <- z_props %>%
+#    mutate(cluster = factor(cluster, levels=unique_clusters)) %>%
+#    ggplot(aes(x=as.integer(sample), y=prop, colour=cluster)) +
+#        geom_line() +
+#        theme_bw() +
+#        ylim(0, 1) +
+#        labs(x="Sample", y="Proportion in cluster") +
+#        scale_colour_discrete("Cluster", guide=F, drop=F)
+#
+
+#manual_perms <- bind_rows(lapply(1:9000, function(i) {
+#    new_labels <- foo$permutations[i, ][foo$z[i, ]] + 1
+#    props <- table(new_labels) / 1000
+#    data.frame(sample=i, cluster = names(props), prop=as.numeric(props))
+#}))
+#
+#old_perms <- bind_rows(lapply(1:9000, function(i) {
+#    new_labels <- foo$z[i, ]
+#    props <- table(new_labels) / 1000
+#    data.frame(sample=i, cluster = names(props), prop=as.numeric(props))
+#}))
+#
+#new_perms <- bind_rows(lapply(1:9000, function(i) {
+#    new_labels <- foo$z_relab[i, ]
+#    props <- table(new_labels) / 1000
+#    data.frame(sample=i, cluster = names(props), prop=as.numeric(props))
+#}))
+#
+#manual_perms %>%
+#    ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
+#        geom_line() +
+#        theme_bw() +
+#        ylim(0, 1) +
+#        labs(x="Sample", y="Proportion in cluster") +
+#        scale_colour_discrete("Cluster", guide=F, drop=F)
+#
+#new_perms %>%
+#    ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
+#        geom_line() +
+#        theme_bw() +
+#        ylim(0, 1) +
+#        labs(x="Sample", y="Proportion in cluster") +
+#        scale_colour_discrete("Cluster", guide=F, drop=F)
+#
+#old_perms %>%
+#    ggplot(aes(x=as.integer(sample), y=prop, colour=as.factor(cluster))) +
+#        geom_line() +
+#        theme_bw() +
+#        ylim(0, 1) +
+#        labs(x="Sample", y="Proportion in cluster") +
+#        scale_colour_discrete("Cluster", guide=F, drop=F)
+#
+#head(foo$z[9000, ], 30)
+#head(foo$z_relab[9000, ], 30)
+#foo$permutations[9000, ]
+#head(foo$permutations[9000, ][foo$z[9000, ]], 30)
+#
+#
+#foo <- gibbs_dp(df_3, nsamples=1000, burnin=100, burnrelabel=100, relabel=TRUE)
+#
+## Plot thetas
+## Original
+#plot_gibbs(foo, cluster_threshold = 0.15)
+#
+## Relabelled
+#bar <- foo
+#bar$theta <- bar$theta_relabelled
+#bar$z <- bar$z_relabelled
+#plot_gibbs(bar, cluster_threshold = 0.15)
+#
+#new <- gibbs_dp(df_3, nsamples=10000, burnin=1000, burnrelabel=500, maxK=20)
+#
+## Plot thetas
+## Original
+#plot_gibbs(new, cluster_threshold = 0.15)
+#
+## Relabelled
+#new_relab <- new
+#new_relab$theta <- new_relab$theta_relabelled
+#new_relab$z <- new_relab$z_relabelled
+#plot_gibbs(new_relab, cluster_threshold = 0.15)
+#
+#
+#res_full <- gibbs_full(df_3, nsamples=10000, burnin=1000, K = 3)
+#plot_gibbs(res_full)
+#
+#res_collapsed <- gibbs_collapsed(df_3, nsamples=10000, burnin=1000, K = 3)
+#plot_gibbs(res_collapsed)
