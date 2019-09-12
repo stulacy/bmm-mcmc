@@ -1,280 +1,178 @@
 // [[Rcpp::depends(RcppArmadillo)]]
 
-#include <RcppArmadilloExtensions/sample.h>
-#include <stdlib.h>
-#include <queue>
-#include "stephens.h"
+#include <RcppArmadillo.h>
 
 using namespace Rcpp;
 
+// Using Algorithm 5.2 from
+// http://people.ee.duke.edu/~lcarin/Yuting3.3.06.pdf
 // [[Rcpp::export]]
-List blocked_gibbs_stickbreaking(IntegerMatrix df,
-                                 int nsamples,
-                                 double alpha,
-                                 double beta,
-                                 double gamma,
-                                 double a,
-                                 double b,
-                                 int burnin,
-                                 bool relabel,
-                                 int burnrelabel,
-                                 int maxK,
-                                 bool debug) {
+List gibbs_stickbreaking_cpp(IntegerMatrix df,
+                             NumericVector initialPi,
+                             NumericMatrix initialTheta,
+                             int nsamples,
+                             int maxK,
+                             double alpha,
+                             double beta,
+                             double gamma,
+                             int burnin,
+                             bool debug) {
 
-    // Setup int K giving current number of clusters, initialised to number of observations
-    arma::Mat<int> df_arma = as<arma::Mat<int>>(df);
+    int N = df.nrow();
+    int P = df.ncol();
 
-    int N = df_arma.n_rows;
-    int P = df_arma.n_cols;
-    int K = 0;
-    int curr_cluster;
 
-    if (beta != gamma) {
-        Rcpp::stop("Error: sampler currently not implemented for non-symmetric priors on beta and gamma\n");
-    }
+    // Random sample for first row
+    NumericMatrix pi_sampled(nsamples, maxK);
+    arma::cube z_sampled(N, maxK, nsamples);
+    arma::cube theta_sampled(maxK, P, nsamples);
+    arma::Mat<int> z_out(nsamples, N);
 
-    // Also want to save allocations along sampler
-    arma::Mat<int> allocations(nsamples, N);
-    arma::Mat<int> allocations_relabelled(nsamples, N);
-    
-    // Create 2D vector of cluster membership. Vector is K length with each entry being
-    // 1D vector detailing the observations residing in that cluster
-    std::vector< std::vector< int > > clusters(maxK);
-    // a 1D vector of ints max size N, detailing the clusters that are in use
-    // i.e. which indices of clusters are not empty
-    std::vector<int> used_clusters;
-    std::priority_queue<int, std::vector<int>, std::greater<int> > unused_clusters; 
-    for (int i = 0; i < N; ++i) {
-        unused_clusters.push(i);
-    }
+    int Znk;
+    double loglh, cum_probs, dummy;
+    pi_sampled(0, _) = initialPi;
+    theta_sampled.slice(0) = as<arma::mat>(initialTheta);
+    NumericMatrix thisTheta(maxK,P);
+    IntegerVector this_z(maxK);
+    NumericVector s(maxK);
+    arma::vec dirich_params = arma::zeros(maxK);
+    NumericVector this_pi(maxK);
+    NumericMatrix theta_row(maxK, P);
 
-    // Can calculate probability of new cluster outside of loop as is constant
-    // due to use of symmetric priors on theta with Beta(beta, gamma) beta == gamma
-    double RHS_newk = P * (log(beta) - log(beta + gamma));
-    
-    int xnd, sum_xd, Nk, smallest_cluster, smallest_size, this_cluster_size;
-    double left, right, LHS, denom, logLH, max_prob, probs_newk;
-
-    // And want to save probabilities and thetas
-    arma::cube thetas(maxK, P, nsamples, arma::fill::zeros);
-    arma::cube thetas_relab(maxK, P, nsamples, arma::fill::zeros);
-
-    std::vector <int> Ck;
-    double b_eps, pi, pi1, pi2;
-    arma::vec alpha_sampled(nsamples);
-    alpha_sampled(0) = alpha;
-    double alpha_new, foobar, sumprob, left_denom;
-    arma::cube probs_out(N, maxK, burnrelabel, arma::fill::zeros);
-    arma::mat probs_sample(N, maxK, arma::fill::zeros);
-    arma::mat Q;
-    std::pair<arma::Row<int>, arma::mat> stephens_out;
-    arma::Row<int> permutations_sample(maxK);
-    arma::Mat<int> permutations(nsamples - burnin, maxK);
-        
     for (int j=1; j < nsamples; ++j) {
-        Rcout << "Sample " << j+1 << "\tK: " << K << "\n";
+        Rcpp::Rcout << "Sample: " << j+1 << "\n";
 
-        // Constant value on denominator of left hand fraction updates with alpha each sample
-        left_denom = log(N - 1 + alpha_sampled(j-1));
+        thisTheta = wrap(theta_sampled.slice(j-1));
+        for (int i=0; i < N; ++i) {
+            if (debug) Rcout << "Iterating through N to sample z\n";
+            cum_probs = 0;
 
-        // Probability of creating a new cluster using Eq 25 from Maartens only updates with each sample
-        // as we're using symmetrical prior on theta
-        probs_newk = log(alpha_sampled(j-1)) - left_denom + RHS_newk;
-
-        for (int i = 0; i < N; ++i) {
-            
-            if (debug) Rcout << "Individual: " << i << "\n";
-            
-            if (j > 1) {
-                // Drop person from current cluster
-                curr_cluster = allocations(j-1, i) - 1;
-                clusters[curr_cluster].erase(std::remove(clusters[curr_cluster].begin(),
-                                                         clusters[curr_cluster].end(),
-                                                         i),
-                                             clusters[curr_cluster].end());
-    
-                // If this makes it empty, then remove it from list of used clusters and decrement K
-                if (clusters[curr_cluster].size() == 0) {
-                    used_clusters.erase(std::remove(used_clusters.begin(),
-                                                    used_clusters.end(),
-                                                    curr_cluster),
-                                        used_clusters.end());
-                    unused_clusters.push(curr_cluster);
-                    K--;
-                }
-    
-                if (debug) Rcout << "Dropped individual. K: " << K << "\tLength of used_clusters: " << used_clusters.size() << "\n";
-            }
-    
-            // For k in 1:K calculate probabilities of being in k by use of the same equation as before
-            // Firstly identify set of patients in this cluster
-            NumericVector probs(K+1);
-            IntegerVector choices(K+1);
-            NumericVector probs_norm(K+1);
-
-            //if (debug) Rcout << "Calculating probabilities for known K\n";
-            for (int k = 0; k < K; ++k) {
-                //if (debug) Rcout << "k: " << k << "\n";
-                Ck = clusters[used_clusters[k]];
-                Nk = Ck.size();
-                if (Nk == 0) Rcout << "Something's gone wrong... Nk of 0!\n";
-                LHS = log(Nk) - left_denom;
-                logLH = 0;
-                denom = log(beta + gamma + Nk);
+            // Calculate data likelihood
+            for (int k=0; k < maxK; ++k) {
+                loglh = 0;
+                if (debug) Rcout << "Calculating likelihood\n";
+                if (debug) Rcout << "k = " << k << "\n";
                 for (int d=0; d < P; ++d) {
-                    //if (debug) Rcout << "d: " << d << "\n";
-                    sum_xd = 0;
-                    for (int c : Ck) {
-                        sum_xd += df_arma(c, d);
-                    }
-
-                    xnd = df_arma(i, d);
-                    left = xnd * log(beta + sum_xd);
-                    right = (1-xnd) * log(gamma + Nk - sum_xd);
-                    logLH += left + right - denom;
-                }
-                probs(k) = LHS + logLH;
-                choices(k) = used_clusters[k];
-            }
-
-            // Add on probability and label for new K, which will label as an unused
-            // cluster in the N dimensions, and hence is available
-            if (unused_clusters.size() == 0) {
-                Rcpp::stop("Error: have no free clusters, need to create one.");
-            }
-            int new_cluster = unused_clusters.top();
-            choices(K) = new_cluster;
-            probs(K) = probs_newk;
-
-            // Calculate exponentiated probs using exponentiate-normalise trick
-            max_prob = max(probs);
-            if (debug) Rcout << "Max prob: " << max_prob << "\n";
-            sumprob=0;
-            for (int k = 0; k <= K; ++k) {
-                foobar = exp(probs(k) - max_prob);
-                probs_norm(k) = foobar;
-                sumprob += foobar;
-            }
-
-            // Finish softmax exp-normalise 
-            for (int k=0; k <= K; ++k) {
-                probs_norm(k) /= sumprob;
-            }
-            
-            // Save initial probabilities so can do batch Stephens
-            // to generate initial Q
-            if (relabel) {
-                if (j < burnin && j >= (burnin - burnrelabel)) {
-                    for (int k=0; k <= K; ++k) {
-                        probs_out(i, choices(k), j - burnin + burnrelabel) = probs_norm(k);
-                    }
-                } else if (j >= burnin) {
-                    for (int k=0; k <= K; ++k) {
-                        probs_sample(i, choices(k)) = probs_norm(k);
+                    loglh += df(i, d) * log(thisTheta(k, d)) + (1 - df(i, d)) * log(1 - thisTheta(k, d));
+                    if (debug) {
+                        Rcout << "d = " << d << "\n";
+                        Rcout << "Theta val: " << thisTheta(k, d) << "\tx: " << df(i, d) << "\n";
+                        Rcout << "Updated loglh " << loglh << "\n";
                     }
                 }
+
+                // Then calculate probabilities per cluster
+                dummy = exp(log(pi_sampled(j-1, k)) + loglh);
+                s[k] = dummy;
+                cum_probs += dummy;
             }
-            
-            if (debug) Rcout << "Raw probs (" << probs.size() << ") :" << probs << "\n";
-            if (debug) Rcout << "Normalised probs (" << probs_norm.size() << ") :" << probs_norm << "\n";
-            if (debug) Rcout << "Sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
 
-            // Sample z_i from it (using R's sample function rather than rmultinom)
-            int ret = RcppArmadillo::sample(choices, 1, false, probs_norm)(0);
-            if (debug) Rcout << "Sampled k: " << ret << "\n";
-
-            // If z_i = K+1 then update list of used and unused clusters
-            // But truncate if have enough clusters and add to smallest cluster
-            if (ret == new_cluster) {
-                if (K < (maxK - 1)) {
-                    if (debug) Rcout << "Have created new cluster\n";
-                    unused_clusters.pop();
-                    used_clusters.push_back(new_cluster);
-                    K++;
-                } else {
-                    if (debug) Rcout << "Already at max K limit so will not create cluster\n";
-                    smallest_cluster=0;
-                    smallest_size = N+1;
-                    for (int k = 0; k < K; ++k) {
-                        this_cluster_size = clusters[used_clusters[k]].size();
-                        if (this_cluster_size < smallest_size) {
-                            smallest_size = this_cluster_size;
-                            smallest_cluster = k;
-                        }
-                        ret = smallest_cluster;
-                    }
+            if (debug) {
+                Rcout << "Raw probs:\n";
+                for (int p = 0; p < maxK; ++p) {
+                    Rcout << s[p] << " | ";
                 }
+                Rcout << "\n";
             }
-            clusters[ret].push_back(i);
-            allocations(j, i) = ret + 1;
-            if (debug) Rcout << "After sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
 
-            // Sample alpha from Gamma(a, b) using method described by Escobar and West
-            // in Section 6
-            // https://pdfs.semanticscholar.org/df25/adb36860c1ad9edaac04b8855a2f19e79c5b.pdf
-            b_eps = b - log(R::rbeta(alpha_sampled(j-1)+1, N));
-            pi1 = a + K - 1;
-            pi2 = N * b_eps;
-            pi = pi1 / (pi1 + pi2);
-            alpha_new = pi * R::rgamma(a+K, 1/(b_eps)) + (1-pi) * R::rgamma(a+K-1, 1/(b_eps));
-    
-            if (debug) Rcout << "b-log(epsilon): " << b_eps << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
-            alpha_sampled(j) = alpha_new;
-            
-        }  // End for 1:N loop
+            // Then normalise
+            for (int p = 0; p < maxK; ++p) {
+                s[p] /= cum_probs;
+            }
+
+            if (debug) {
+                Rcout << "Normalised probs:\n";
+                for (int p = 0; p < maxK; ++p) {
+                    Rcout << s[p] << " | ";
+                }
+                Rcout << "\n";
+            }
+
+            // Now can draw labels
+            rmultinom(1, s.begin(), maxK, this_z.begin());
+            if (debug) Rcout << "this_z: " << this_z << "\n";
+            z_sampled.slice(j).row(i) = as<arma::vec>(this_z).t();
+        }  // End looping through individuals
+
+        if (debug) Rcout << "\n\nNow going to sample pi";
         
-        // To relabel clusters use Stephen's 2000b online algorithm.
-        // Firstly need to initialise Q with values taken from a batch formulation
-        // over $burnrelabel samples
-        if (relabel) {
-            if (j == (burnin - 1)) {
-                Rcout << "Running Stephens Batch relabelling to identify initial Q values\n";
-                Q = my_stephens_batch(probs_out, false);
-            } else if (j >= burnin) {
-                stephens_out = my_stephens_online(Q, probs_sample, j, false);
-                Q = stephens_out.second;
-                permutations_sample = stephens_out.first;
-                // Relabel Z 
-                permutations.row(j-burnin) = permutations_sample;
-                for (int i = 0; i < N; ++i) {
-                    allocations_relabelled(j, i) = permutations_sample(allocations(j, i) - 1) + 1;
+        // Simulate V values
+        
+        // Now calculate number of patients in each cluster and sum of data points as before
+        IntegerVector ck(maxK);
+        IntegerMatrix Vkd(maxK, P);
+        // Doing this in reverse as need number in previous clusters for 
+        // stick breaking
+        int num_previous_clusters = 0;
+        arma::vec v(maxK);
+        for (int k = maxK-1; k >= 0; --k) {
+            // Get number of people in each cluster
+            for (int i=0; i < N; ++i) {
+                Znk = z_sampled(i, k, j);
+                ck[k] += Znk;
+                for (int d = 0; d < P; ++d) {
+                    if (debug) {
+                        Rcout << "k: " << k << "\t";
+                        Rcout << "d: " << d << "\t";
+                        Rcout << "i: " << i << "\t";
+                        Rcout << "Znk: " << Znk << "\t";
+                        Rcout << "ck[k]: " << ck[k] << "\t";
+                        Rcout << "df[i, d]: " << df(i, d) << "\n";
+                    }
+                    Vkd(k, d) += Znk * df(i, d);
                 }
+            }
+            double beta1, beta2;
+            beta1 = 1 + ck[k];
+            beta2 = alpha + num_previous_clusters;
+            v(k) = R::rbeta(beta1, beta2);
+            if (debug) Rcout << "beta1: " << beta1 << "\tbeta2: " << beta2 << "\tv: " << v(k) << "\n";
+            
+            num_previous_clusters += ck[k];
+        }
+        v(maxK-1) = 1;
+        
+        // Stick breaking to get pis
+        this_pi(0) = v(0);
+        double cumprod = 1 - v(0);
+        for (int k = 1; k < maxK; k++) {
+            this_pi(k) = cumprod * v(k);
+            cumprod *= (1 - v(k));
+        }
+        if (debug) Rcout << "this_pi: " << this_pi << "\n";
+        pi_sampled(j, _) = this_pi;
+
+        // Generate theta(t)kd from Beta(γkd+vkd,δkd+uk−vkd)(for allk,d)
+        for (int k = 0; k < maxK; ++k) {
+            for (int d = 0; d < P; ++d) {
+                if (debug) {
+                    Rcout << "k: " << k << "\td: " << d << "\t";
+                    Rcout << "Vkd: " << Vkd(k, d) << "\tck: " << ck[k] << "\t";
+                }
+                theta_row(k, d) = R::rbeta(beta + Vkd(k, d), gamma + ck[k] - Vkd(k, d));
             }
         }
-        
-        // Estimate thetas
-        if (debug) Rcout << "Estimating thetas\n";
-        int cluster_index;
-        for (int k : used_clusters) {
-            Ck = clusters[k];
-            int Nk = Ck.size();
-            
-            for (int d=0; d < P; ++d) {
-                int dsum = 0;
-                for (int c : Ck) {
-                    dsum += df_arma(c, d);
-                }
-                thetas(k, d, j) = dsum / (double)Nk;
-                
-                if (relabel && j >= burnin) {
-                    thetas_relab(permutations_sample(k), d, j) = dsum / (double)Nk;
-                }
-            }
-        }
-        
-    }  // End for 1:Nsamples loop
-    
-    List out;
-    arma::cube thetas_post = thetas.tail_slices(nsamples - burnin);
-    arma::cube thetas_relabelled = thetas_relab.tail_slices(nsamples - burnin);
-    if (relabel) {
-        out["z_relabelled"] = allocations_relabelled.tail_rows(nsamples-burnin);
-        out["theta_relabelled"] = thetas_relabelled;
+        if (debug) Rcout << "Theta: " << theta_row << "\n";
+        theta_sampled.slice(j) = as<arma::mat>(theta_row);
     }
-    out["z"] = allocations.tail_rows(nsamples-burnin);
-    out["theta"] = thetas_post;
-    out["alpha"] = alpha_sampled.tail(nsamples-burnin);
-    out["permutations"] = permutations;
-    return out;
+
+    // Determine cluster labels for sampled values, as currently are in binary format
+    for (int j = 0; j < nsamples; ++j) {
+        for (int i = 0; i < N; ++i) {
+            for (int k = 0; k < maxK; ++k) {
+                if (z_sampled(i, k, j) == 1) {
+                    z_out(j, i) = k + 1;
+                    continue;
+                }
+            }
+        }
+    }
+    
+    List ret;
+    ret["pi"] = pi_sampled(Range(burnin, nsamples-1), _);
+    ret["z"] = z_out.tail_rows(nsamples-burnin);
+    arma::cube thetas_post = theta_sampled.tail_slices(nsamples - burnin);
+    ret["theta"] = thetas_post;
+    return(ret);
 }
 

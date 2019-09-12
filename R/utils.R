@@ -68,6 +68,33 @@ gibbs_full <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
               nsamples, K, alpha, beta, gamma, burnin, debug)
 }
 
+#' Stick breaking blocked Gibbs sampler for infinite Bernoulli Mixture Model
+#' 
+#' @param data Data frame or matrix with observations in rows and binary
+#'   variables in columns
+#' @param nsamples Number of samples to take
+#' @param K Number of mixtures
+#' @param alpha Concentration parameter
+#' @param beta First Beta parameter on prior used for all Bernoulli
+#'   variables across all components
+#' @param gamma Second Beta parameter on prior used for all Bernoulli
+#'   variables across all components
+#' @param burnin Number of samples to discard at start of chain
+#' @param debug Whether to display debug messages.
+#' @return A list with sampled values pi, z, and theta.
+#' @export
+gibbs_stickbreaking <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
+                       burnin=NULL, debug=FALSE) {
+    if (is.null(burnin)) burnin <- round(0.1 * nsamples)
+    initial_pi <- stats::runif(K)
+    initial_pi <- exp(initial_pi)
+    initial_pi <- initial_pi / sum(initial_pi)
+
+    initial_theta <- matrix(stats::runif(K*ncol(data)), ncol=ncol(data), nrow=K)
+    gibbs_stickbreaking_cpp(data, initial_pi, initial_theta,
+                            nsamples, K, alpha, beta, gamma, burnin, debug)
+}
+
 #' Plots samples from Bernoulli mixture models
 #' 
 #' @importFrom magrittr "%>%"
