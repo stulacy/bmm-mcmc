@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <queue>
 #include "stephens.h"
+#include "utils.h"
 
 using namespace Rcpp;
 
@@ -226,15 +227,7 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             allocations(j, i) = ret + 1;
             if (debug) Rcout << "After sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
 
-            // Sample alpha from Gamma(a, b) using method described by Escobar and West
-            // in Section 6
-            // https://pdfs.semanticscholar.org/df25/adb36860c1ad9edaac04b8855a2f19e79c5b.pdf
-            b_eps = b - log(R::rbeta(alpha_sampled(j-1)+1, N));
-            pi1 = a + K - 1;
-            pi2 = N * b_eps;
-            pi = pi1 / (pi1 + pi2);
-            alpha_new = pi * R::rgamma(a+K, 1/(b_eps)) + (1-pi) * R::rgamma(a+K-1, 1/(b_eps));
-    
+            alpha_new = update_alpha(alpha_sampled(j-1), a, b, N, K);
             if (debug) Rcout << "b-log(epsilon): " << b_eps << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
             alpha_sampled(j) = alpha_new;
             

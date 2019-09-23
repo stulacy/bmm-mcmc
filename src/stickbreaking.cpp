@@ -1,6 +1,6 @@
 // [[Rcpp::depends(RcppArmadillo)]]
-
-#include <RcppArmadillo.h>
+#include "utils.h"
+#include "stephens.h"
 
 using namespace Rcpp;
 
@@ -15,7 +15,11 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
                              double alpha,
                              double beta,
                              double gamma,
+                             double a,
+                             double b,
                              int burnin,
+                             bool relabel,
+                             int burnrelabel,
                              bool debug) {
 
     int N = df.nrow();
@@ -26,11 +30,19 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
     NumericMatrix pi_sampled(nsamples, maxK);
     arma::cube z_sampled(N, maxK, nsamples);
     arma::cube theta_sampled(maxK, P, nsamples);
+    arma::cube theta_relab(maxK, P, nsamples);
     arma::Mat<int> z_out(nsamples, N);
+    arma::Mat<int> z_out_relabelled(nsamples, N);
 
     int Znk;
-    double loglh, cum_probs, dummy;
+    // If pi is greater than this threshold then we deem it a 'viable'
+    // cluster. Number of viable clusters only used for updating alpha
+    double viable_threshold = 0.01;
+    int K_viable = maxK;
+    double loglh, cum_probs, dummy, theta_update;
     pi_sampled(0, _) = initialPi;
+    arma::vec alpha_sampled(nsamples);
+    alpha_sampled(0) = alpha;
     theta_sampled.slice(0) = as<arma::mat>(initialTheta);
     NumericMatrix thisTheta(maxK,P);
     IntegerVector this_z(maxK);
@@ -38,6 +50,12 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
     arma::vec dirich_params = arma::zeros(maxK);
     NumericVector this_pi(maxK);
     NumericMatrix theta_row(maxK, P);
+    arma::cube probs_out(N, maxK, burnrelabel, arma::fill::zeros);
+    arma::mat probs_sample(N, maxK, arma::fill::zeros);
+    arma::mat Q;
+    std::pair<arma::Row<int>, arma::mat> stephens_out;
+    arma::Row<int> permutations_sample(maxK);
+    arma::Mat<int> permutations(nsamples - burnin, maxK);
 
     for (int j=1; j < nsamples; ++j) {
         Rcpp::Rcout << "Sample: " << j+1 << "\n";
@@ -92,12 +110,50 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
             rmultinom(1, s.begin(), maxK, this_z.begin());
             if (debug) Rcout << "this_z: " << this_z << "\n";
             z_sampled.slice(j).row(i) = as<arma::vec>(this_z).t();
+            // Determine cluster labels for sampled values, as currently are in binary format
+            for (int k = 0; k < maxK; ++k) {
+                if (this_z(k) == 1) {
+                    z_out(j, i) = k + 1;
+                    continue;
+                }
+            }
+            
+            // Save initial probabilities so can do batch Stephens
+            // to generate initial Q
+            if (relabel) {
+                if (j < burnin && j >= (burnin - burnrelabel)) {
+                    for (int k=0; k < maxK; ++k) {
+                        probs_out(i, k, j - burnin + burnrelabel) = s(k);
+                    }
+                } else if (j >= burnin) {
+                    for (int k=0; k < maxK; ++k) {
+                        probs_sample(i, k) = s(k);
+                    }
+                }
+            }
         }  // End looping through individuals
+        
+        // To relabel clusters use Stephen's 2000b online algorithm.
+        // Firstly need to initialise Q with values taken from a batch formulation
+        // over $burnrelabel samples
+        if (relabel) {
+            if (j == (burnin - 1)) {
+                Rcout << "Running Stephen's batch relabelling algorithm.\n";
+                Q = my_stephens_batch(probs_out, false);
+            } else if (j >= burnin) {
+                stephens_out = my_stephens_online(Q, probs_sample, j, false);
+                Q = stephens_out.second;
+                permutations_sample = stephens_out.first;
+                // Relabel Z 
+                permutations.row(j-burnin) = permutations_sample;
+                for (int i = 0; i < N; ++i) {
+                    z_out_relabelled(j, i) = permutations_sample(z_out(j, i)-1) + 1;
+                }
+            }
+        }
+        
 
         if (debug) Rcout << "\n\nNow going to sample pi";
-        
-        // Simulate V values
-        
         // Now calculate number of patients in each cluster and sum of data points as before
         IntegerVector ck(maxK);
         IntegerMatrix Vkd(maxK, P);
@@ -124,7 +180,7 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
             }
             double beta1, beta2;
             beta1 = 1 + ck[k];
-            beta2 = alpha + num_previous_clusters;
+            beta2 = alpha_sampled(j-1) + num_previous_clusters;
             v(k) = R::rbeta(beta1, beta2);
             if (debug) Rcout << "beta1: " << beta1 << "\tbeta2: " << beta2 << "\tv: " << v(k) << "\n";
             
@@ -132,11 +188,20 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
         }
         v(maxK-1) = 1;
         
+        
+        // TODO Can clean this up, move k=0 into loop
+        K_viable = 0;
         // Stick breaking to get pis
         this_pi(0) = v(0);
+        if (this_pi(0) > viable_threshold) {
+            K_viable++;
+        }
         double cumprod = 1 - v(0);
         for (int k = 1; k < maxK; k++) {
             this_pi(k) = cumprod * v(k);
+            if (this_pi(k) > viable_threshold) {
+                K_viable++;
+            }
             cumprod *= (1 - v(k));
         }
         if (debug) Rcout << "this_pi: " << this_pi << "\n";
@@ -149,30 +214,34 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
                     Rcout << "k: " << k << "\td: " << d << "\t";
                     Rcout << "Vkd: " << Vkd(k, d) << "\tck: " << ck[k] << "\t";
                 }
-                theta_row(k, d) = R::rbeta(beta + Vkd(k, d), gamma + ck[k] - Vkd(k, d));
-            }
-        }
-        if (debug) Rcout << "Theta: " << theta_row << "\n";
-        theta_sampled.slice(j) = as<arma::mat>(theta_row);
-    }
-
-    // Determine cluster labels for sampled values, as currently are in binary format
-    for (int j = 0; j < nsamples; ++j) {
-        for (int i = 0; i < N; ++i) {
-            for (int k = 0; k < maxK; ++k) {
-                if (z_sampled(i, k, j) == 1) {
-                    z_out(j, i) = k + 1;
-                    continue;
+                theta_update = R::rbeta(beta + Vkd(k, d), gamma + ck[k] - Vkd(k, d));
+                theta_sampled(k, d, j) = theta_update;
+                if (relabel && j >= burnin) {
+                    theta_relab(permutations_sample(k), d, j) = theta_update;
                 }
             }
         }
-    }
+        if (debug) Rcout << "Theta: " << theta_row << "\n";
+        
+        // Update alpha
+        alpha_sampled(j) = update_alpha(alpha_sampled(j-1), a, b, N, K_viable);
+    }  // End sampling loop
     
     List ret;
-    ret["pi"] = pi_sampled(Range(burnin, nsamples-1), _);
-    ret["z"] = z_out.tail_rows(nsamples-burnin);
     arma::cube thetas_post = theta_sampled.tail_slices(nsamples - burnin);
-    ret["theta"] = thetas_post;
+    ret["pi"] = pi_sampled(Range(burnin, nsamples-1), _);
+    ret["alpha"] = alpha_sampled.tail_rows(nsamples-burnin);
+    if (relabel) {
+        ret["z"] = z_out_relabelled.tail_rows(nsamples-burnin);
+        arma::cube thetas_relabelled = theta_relab.tail_slices(nsamples - burnin);
+        ret["theta"] = thetas_relabelled;
+        ret["z_original"] = z_out.tail_rows(nsamples-burnin);
+        ret["theta_original"] = thetas_post;
+    } else {
+        ret["z"] = z_out.tail_rows(nsamples-burnin);
+        ret["theta"] = thetas_post;
+    }
+    
     return(ret);
 }
 

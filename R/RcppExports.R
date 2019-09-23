@@ -25,7 +25,7 @@ my_stephens_batch <- function(p, debug) {
     .Call('_bmmmcmc_my_stephens_batch', PACKAGE = 'bmmmcmc', p, debug)
 }
 
-gibbs_stickbreaking_cpp <- function(df, initialPi, initialTheta, nsamples, maxK, alpha, beta, gamma, burnin, debug) {
-    .Call('_bmmmcmc_gibbs_stickbreaking_cpp', PACKAGE = 'bmmmcmc', df, initialPi, initialTheta, nsamples, maxK, alpha, beta, gamma, burnin, debug)
+gibbs_stickbreaking_cpp <- function(df, initialPi, initialTheta, nsamples, maxK, alpha, beta, gamma, a, b, burnin, relabel, burnrelabel, debug) {
+    .Call('_bmmmcmc_gibbs_stickbreaking_cpp', PACKAGE = 'bmmmcmc', df, initialPi, initialTheta, nsamples, maxK, alpha, beta, gamma, a, b, burnin, relabel, burnrelabel, debug)
 }
 

@@ -83,16 +83,17 @@ gibbs_full <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
 #' @param debug Whether to display debug messages.
 #' @return A list with sampled values pi, z, and theta.
 #' @export
-gibbs_stickbreaking <- function(data, nsamples, K, alpha=1, beta=0.5, gamma=0.5,
-                       burnin=NULL, debug=FALSE) {
+gibbs_stickbreaking <- function(data, nsamples, maxK, alpha=1, beta=0.5, gamma=0.5, a=1, b=1,
+                       burnin=NULL, relabel=TRUE, burnrelabel=50, debug=FALSE) {
     if (is.null(burnin)) burnin <- round(0.1 * nsamples)
-    initial_pi <- stats::runif(K)
+    initial_pi <- stats::runif(maxK)
     initial_pi <- exp(initial_pi)
     initial_pi <- initial_pi / sum(initial_pi)
 
-    initial_theta <- matrix(stats::runif(K*ncol(data)), ncol=ncol(data), nrow=K)
+    initial_theta <- matrix(stats::runif(maxK*ncol(data)), ncol=ncol(data), nrow=maxK)
     gibbs_stickbreaking_cpp(data, initial_pi, initial_theta,
-                            nsamples, K, alpha, beta, gamma, burnin, debug)
+                            nsamples, maxK, alpha, beta, gamma, a, b, burnin, relabel, burnrelabel,
+                            debug)
 }
 
 #' Plots samples from Bernoulli mixture models
