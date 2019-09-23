@@ -3,6 +3,7 @@
 export(gibbs_collapsed)
 export(gibbs_dp)
 export(gibbs_full)
+export(gibbs_stickbreaking)
 export(plot_gibbs)
 importFrom(Rcpp,evalCpp)
 importFrom(magrittr,"%>%")
