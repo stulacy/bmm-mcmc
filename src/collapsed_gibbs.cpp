@@ -1,6 +1,6 @@
 // [[Rcpp::depends(RcppArmadillo)]]
-
-#include <RcppArmadillo.h>
+#include "utils.h"
+#include "stephens.h"
 
 using namespace Rcpp;
 
@@ -28,6 +28,8 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                          double alpha,
                          double beta,
                          double gamma,
+                         double a, 
+                         double b,
                          int burnin,
                          bool debug) {
 
@@ -41,6 +43,13 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
     z_out.row(0) = as<arma::Row<int>>(initialK);
     arma::cube thetas(K, P, nsamples);
     arma::cube probs_out(nsamples, N, K);
+    arma::vec alpha_sampled(nsamples);
+    if (alpha == 0) {
+        alpha_sampled(0) = 1;
+    } else {
+        alpha_sampled.fill(alpha);
+    }
+
     int curr_cluster;
 
     // Vector for each cluster to track members
@@ -82,7 +91,7 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                 Nk = Ck.size();
                 
                 if (Nk > 0) {
-                    LHS = log(Nk + (alpha/K)) - log(N - 1 + alpha);
+                    LHS = log(Nk + (alpha_sampled(j-1)/K)) - log(N - 1 + alpha_sampled(j-1));
                     if (debug) Rcout << "Nk: " << Nk << "\n";
                     if (debug) Rcout << "LHS: " << LHS << "\n";
                     logLH = 0;
@@ -163,6 +172,11 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                 thetas(k, d, j) = dsum / (double)Nk;
             }
         }
+        
+        // Update alpha
+        if (alpha == 0) {
+            alpha_sampled(j) = update_alpha(alpha_sampled(j-1), a, b, N, K);
+        }
     }
     
     List ret;
@@ -173,6 +187,7 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
     arma::cube probs_post = probs_out.rows(burnin, nsamples-1);
     ret["theta"] = thetas_post;
     ret["probabilities"] = probs_post;
+    ret["alpha"] = alpha_sampled.tail_rows(nsamples-burnin);
     return ret;
 }
 
