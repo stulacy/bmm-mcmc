@@ -1,6 +1,6 @@
 // [[Rcpp::depends(RcppArmadillo)]]
-
-#include <RcppArmadillo.h>
+#include "utils.h"
+#include "stephens.h"
 
 using namespace Rcpp;
 
@@ -37,6 +37,8 @@ List gibbs_cpp(IntegerMatrix df,
                         double alpha,
                         double beta,
                         double gamma,
+                        double a,
+                        double b,
                         int burnin,
                         bool debug) {
 
@@ -60,6 +62,12 @@ List gibbs_cpp(IntegerMatrix df,
     arma::vec dirich_params = arma::zeros(K);
     NumericVector this_pi(K);
     NumericMatrix theta_row(K, P);
+    arma::vec alpha_sampled(nsamples);
+    if (alpha == 0) {
+        alpha_sampled(0) = 1;
+    } else {
+        alpha_sampled.fill(alpha);
+    }
 
     for (int j=1; j < nsamples; ++j) {
         Rcpp::Rcout << "Sample: " << j+1 << "\n";
@@ -140,7 +148,7 @@ List gibbs_cpp(IntegerMatrix df,
         }
 
         for (int k = 0; k < K; k++) {
-            dirich_params(k) = (alpha / K) + ck[k];
+            dirich_params(k) = (alpha_sampled(j-1) / K) + ck[k];
         }
         if (debug) Rcout << "dirich params: " << dirich_params << "\n";
 
@@ -161,6 +169,11 @@ List gibbs_cpp(IntegerMatrix df,
         }
         if (debug) Rcout << "Theta: " << theta_row << "\n";
         theta_sampled.slice(j) = as<arma::mat>(theta_row);
+        
+        // Update alpha
+        if (alpha == 0) {
+            alpha_sampled(j) = update_alpha(alpha_sampled(j-1), a, b, N, K);
+        }
     }
 
     // Determine cluster labels for sampled values, as currently are in binary format
@@ -180,6 +193,7 @@ List gibbs_cpp(IntegerMatrix df,
     ret["z"] = z_out.tail_rows(nsamples-burnin);
     arma::cube thetas_post = theta_sampled.tail_slices(nsamples - burnin);
     ret["theta"] = thetas_post;
+    ret["alpha"] = alpha_sampled.tail_rows(nsamples-burnin);
     return(ret);
 }
 

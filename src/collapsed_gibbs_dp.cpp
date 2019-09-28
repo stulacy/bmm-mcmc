@@ -80,7 +80,11 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     std::vector <int> Ck;
     double b_eps, pi, pi1, pi2;
     arma::vec alpha_sampled(nsamples);
-    alpha_sampled(0) = alpha;
+    if (alpha == 0) {
+        alpha_sampled(0) = 1;
+    } else {
+        alpha_sampled.fill(alpha);
+    }
     double alpha_new, foobar, sumprob, left_denom;
     arma::cube probs_out(N, maxK, burnrelabel, arma::fill::zeros);
     arma::mat probs_sample(N, maxK, arma::fill::zeros);
@@ -227,9 +231,11 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             allocations(j, i) = ret + 1;
             if (debug) Rcout << "After sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
 
-            alpha_new = update_alpha(alpha_sampled(j-1), a, b, N, K);
-            if (debug) Rcout << "b-log(epsilon): " << b_eps << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
-            alpha_sampled(j) = alpha_new;
+            if (alpha == 0) {
+                alpha_new = update_alpha(alpha_sampled(j-1), a, b, N, K);
+                if (debug) Rcout << "b-log(epsilon): " << b_eps << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
+                alpha_sampled(j) = alpha_new;
+            }
             
         }  // End for 1:N loop
         

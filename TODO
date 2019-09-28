@@ -5,7 +5,5 @@
   - Incorporate redundant features into likelihood (look up White 2016)
   - Implement predictive distribution
   - Add relabelling to all algorithms
-  - Make alpha random in all algorithms
   - Clean up src/ folder (put all lpsolve in one folder and get build working)
-  - Only save samples when over burnin rather than truncate at end
 
