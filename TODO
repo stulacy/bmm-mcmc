@@ -4,6 +4,5 @@
     - Slice sampler ?
   - Incorporate redundant features into likelihood (look up White 2016)
   - Implement predictive distribution
-  - Add relabelling to all algorithms
   - Clean up src/ folder (put all lpsolve in one folder and get build working)
 

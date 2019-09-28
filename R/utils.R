@@ -36,12 +36,14 @@ gibbs_dp <- function(data, nsamples, alpha=NULL, a=1, b=1, beta=0.5, gamma=0.5,
 #' @export
 gibbs_collapsed <- function(data, nsamples, K, alpha=NULL, beta=0.5, gamma=0.5, 
                             a=1, b=1,
-                            burnin=NULL, debug=FALSE) {
+                            burnin=NULL, relabel=FALSE, burnrelabel=50, debug=FALSE) {
     if (is.null(burnin)) burnin <- round(0.1 * nsamples)
+    if (burnrelabel > burnin) burnrelabel <- round(0.1 * burnin)
     initial_K <- sample(1:K, nrow(data), replace=T)
     if (is.null(alpha)) alpha <- 0
     collapsed_gibbs_cpp(data, initial_K,
-                        nsamples, K, alpha, beta, gamma, a, b, burnin, debug)
+                        nsamples, K, alpha, beta, gamma, a, b, burnin, 
+                        relabel, burnrelabel, debug)
 }
 
 #' Full Gibbs sampler for finite Bernoulli Mixture Model
@@ -61,16 +63,18 @@ gibbs_collapsed <- function(data, nsamples, K, alpha=NULL, beta=0.5, gamma=0.5,
 #' @export
 gibbs_full <- function(data, nsamples, K, alpha=NULL, beta=0.5, gamma=0.5,
                        a=1, b=1,
-                       burnin=NULL, debug=FALSE) {
+                       burnin=NULL, relabel=FALSE, burnrelabel=50, debug=FALSE) {
     if (is.null(burnin)) burnin <- round(0.1 * nsamples)
     initial_pi <- stats::runif(K)
     initial_pi <- exp(initial_pi)
     initial_pi <- initial_pi / sum(initial_pi)
     if (is.null(alpha)) alpha <- 0
+    if (burnrelabel > burnin) burnrelabel <- round(0.1 * burnin)
 
     initial_theta <- matrix(stats::runif(K*ncol(data)), ncol=ncol(data), nrow=K)
     gibbs_cpp(data, initial_pi, initial_theta,
-              nsamples, K, alpha, beta, gamma, a, b, burnin, debug)
+              nsamples, K, alpha, beta, gamma, a, b, burnin,
+              relabel, burnrelabel, debug)
 }
 
 #' Stick breaking blocked Gibbs sampler for infinite Bernoulli Mixture Model

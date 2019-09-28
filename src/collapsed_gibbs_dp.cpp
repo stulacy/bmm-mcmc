@@ -86,6 +86,8 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
         alpha_sampled.fill(alpha);
     }
     double alpha_new, foobar, sumprob, left_denom;
+    
+    // Relabelling data structures
     arma::cube probs_out(N, maxK, burnrelabel, arma::fill::zeros);
     arma::mat probs_sample(N, maxK, arma::fill::zeros);
     arma::mat Q;
@@ -282,15 +284,18 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     
     List out;
     arma::cube thetas_post = thetas.tail_slices(nsamples - burnin);
-    arma::cube thetas_relabelled = thetas_relab.tail_slices(nsamples - burnin);
-    if (relabel) {
-        out["z_relabelled"] = allocations_relabelled.tail_rows(nsamples-burnin);
-        out["theta_relabelled"] = thetas_relabelled;
-    }
-    out["z"] = allocations.tail_rows(nsamples-burnin);
-    out["theta"] = thetas_post;
     out["alpha"] = alpha_sampled.tail(nsamples-burnin);
     out["permutations"] = permutations;
+    if (relabel) {
+        arma::cube thetas_relabelled = thetas_relab.tail_slices(nsamples - burnin);
+        out["z"] = allocations_relabelled.tail_rows(nsamples-burnin);
+        out["theta"] = thetas_relabelled;
+        out["z_original"] = allocations.tail_rows(nsamples-burnin);
+        out["theta_original"] = thetas_post;
+    } else {
+        out["z"] = allocations.tail_rows(nsamples-burnin);
+        out["theta"] = thetas_post;
+    }
     return out;
 }
 

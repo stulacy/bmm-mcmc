@@ -40,6 +40,8 @@ List gibbs_cpp(IntegerMatrix df,
                         double a,
                         double b,
                         int burnin,
+                        bool relabel,
+                        int burnrelabel,
                         bool debug) {
 
     int N = df.nrow();
@@ -50,10 +52,20 @@ List gibbs_cpp(IntegerMatrix df,
     NumericMatrix pi_sampled(nsamples, K);
     arma::cube z_sampled(N, K, nsamples);
     arma::cube theta_sampled(K, P, nsamples);
+    arma::cube theta_relab(K, P, nsamples);
     arma::Mat<int> z_out(nsamples, N);
+    arma::Mat<int> z_out_relabelled(nsamples, N);
+    
+    // Structures for relabelling
+    arma::cube probs_out(N, K, burnrelabel, arma::fill::zeros);
+    arma::mat probs_sample(N, K, arma::fill::zeros);
+    arma::mat Q;
+    std::pair<arma::Row<int>, arma::mat> stephens_out;
+    arma::Row<int> permutations_sample(K);
+    arma::Mat<int> permutations(nsamples - burnin, K);
 
     int Znk;
-    double loglh, cum_probs, dummy;
+    double loglh, cum_probs, dummy, theta_update;
     pi_sampled(0, _) = initialPi;
     theta_sampled.slice(0) = as<arma::mat>(initialTheta);
     NumericMatrix thisTheta(K,P);
@@ -61,7 +73,6 @@ List gibbs_cpp(IntegerMatrix df,
     NumericVector s(K);
     arma::vec dirich_params = arma::zeros(K);
     NumericVector this_pi(K);
-    NumericMatrix theta_row(K, P);
     arma::vec alpha_sampled(nsamples);
     if (alpha == 0) {
         alpha_sampled(0) = 1;
@@ -122,7 +133,48 @@ List gibbs_cpp(IntegerMatrix df,
             rmultinom(1, s.begin(), K, this_z.begin());
             if (debug) Rcout << "this_z: " << this_z << "\n";
             z_sampled.slice(j).row(i) = as<arma::vec>(this_z).t();
+            // Determine cluster labels for sampled values, as currently are in binary format
+            for (int k = 0; k < K; ++k) {
+                if (this_z(k) == 1) {
+                    z_out(j, i) = k + 1;
+                    continue;
+                }
+            }
+            
+            // Save initial probabilities so can do batch Stephens
+            // to generate initial Q
+            if (relabel) {
+                if (j < burnin && j >= (burnin - burnrelabel)) {
+                    for (int k=0; k < K; ++k) {
+                        probs_out(i, k, j - burnin + burnrelabel) = s(k);
+                    }
+                } else if (j >= burnin) {
+                    for (int k=0; k < K; ++k) {
+                        probs_sample(i, k) = s(k);
+                    }
+                }
+            }
         }
+        
+        // To relabel clusters use Stephen's 2000b online algorithm.
+        // Firstly need to initialise Q with values taken from a batch formulation
+        // over $burnrelabel samples
+        if (relabel) {
+            if (j == (burnin - 1)) {
+                Rcout << "Running Stephen's batch relabelling algorithm.\n";
+                Q = my_stephens_batch(probs_out, false);
+            } else if (j >= burnin) {
+                stephens_out = my_stephens_online(Q, probs_sample, j, false);
+                Q = stephens_out.second;
+                permutations_sample = stephens_out.first;
+                // Relabel Z 
+                permutations.row(j-burnin) = permutations_sample;
+                for (int i = 0; i < N; ++i) {
+                    z_out_relabelled(j, i) = permutations_sample(z_out(j, i)-1) + 1;
+                }
+            }
+        }
+        
 
         if (debug) Rcout << "\n\nNow going to sample pi and thetas\n";
         // Now sample pi and thetas
@@ -164,11 +216,13 @@ List gibbs_cpp(IntegerMatrix df,
                     Rcout << "k: " << k << "\td: " << d << "\t";
                     Rcout << "Vkd: " << Vkd(k, d) << "\tck: " << ck[k] << "\t";
                 }
-                theta_row(k, d) = R::rbeta(beta + Vkd(k, d), gamma + ck[k] - Vkd(k, d));
+                theta_update = R::rbeta(beta + Vkd(k, d), gamma + ck[k] - Vkd(k, d));
+                theta_sampled(k, d, j) = theta_update;
+                if (relabel && j >= burnin) {
+                    theta_relab(permutations_sample(k), d, j) = theta_update;
+                }
             }
         }
-        if (debug) Rcout << "Theta: " << theta_row << "\n";
-        theta_sampled.slice(j) = as<arma::mat>(theta_row);
         
         // Update alpha
         if (alpha == 0) {
@@ -176,24 +230,21 @@ List gibbs_cpp(IntegerMatrix df,
         }
     }
 
-    // Determine cluster labels for sampled values, as currently are in binary format
-    for (int j = 0; j < nsamples; ++j) {
-        for (int i = 0; i < N; ++i) {
-            for (int k = 0; k < K; ++k) {
-                if (z_sampled(i, k, j) == 1) {
-                    z_out(j, i) = k + 1;
-                    continue;
-                }
-            }
-        }
-    }
-    
     List ret;
-    ret["pi"] = pi_sampled(Range(burnin, nsamples-1), _);
-    ret["z"] = z_out.tail_rows(nsamples-burnin);
     arma::cube thetas_post = theta_sampled.tail_slices(nsamples - burnin);
-    ret["theta"] = thetas_post;
+    ret["pi"] = pi_sampled(Range(burnin, nsamples-1), _);
     ret["alpha"] = alpha_sampled.tail_rows(nsamples-burnin);
+    ret["permutations"] = permutations;
+    if (relabel) {
+        arma::cube thetas_relabelled = theta_relab.tail_slices(nsamples - burnin);
+        ret["z"] = z_out_relabelled.tail_rows(nsamples-burnin);
+        ret["theta"] = thetas_relabelled;
+        ret["z_original"] = z_out.tail_rows(nsamples-burnin);
+        ret["theta_original"] = thetas_post;
+    } else {
+        ret["z"] = z_out.tail_rows(nsamples-burnin);
+        ret["theta"] = thetas_post;
+    }
     return(ret);
 }
 
