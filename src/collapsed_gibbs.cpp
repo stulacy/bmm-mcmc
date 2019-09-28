@@ -1,6 +1,6 @@
 // [[Rcpp::depends(RcppArmadillo)]]
-
-#include <RcppArmadillo.h>
+#include "utils.h"
+#include "stephens.h"
 
 using namespace Rcpp;
 
@@ -28,7 +28,11 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                          double alpha,
                          double beta,
                          double gamma,
+                         double a, 
+                         double b,
                          int burnin,
+                         bool relabel,
+                         int burnrelabel,
                          bool debug) {
 
     arma::Mat<int> df_arma = as<arma::Mat<int>>(df);
@@ -38,9 +42,17 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
 
     // Random sample for first row
     arma::Mat<int> z_out(nsamples, N);
+    arma::Mat<int> z_out_relabelled(nsamples, N);
     z_out.row(0) = as<arma::Row<int>>(initialK);
     arma::cube thetas(K, P, nsamples);
-    arma::cube probs_out(nsamples, N, K);
+    arma::cube thetas_relab(K, P, nsamples);
+    arma::vec alpha_sampled(nsamples);
+    if (alpha == 0) {
+        alpha_sampled(0) = 1;
+    } else {
+        alpha_sampled.fill(alpha);
+    }
+
     int curr_cluster;
 
     // Vector for each cluster to track members
@@ -59,6 +71,14 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
     double probs_sum;
     int Nk, sum_xd, xnd, dsum;
     double LHS, logLH, left, right, denom, full, dummy;
+    
+    // Data structures for relabelling
+    arma::cube probs_out(N, K, burnrelabel, arma::fill::zeros);
+    arma::mat probs_sample(N, K, arma::fill::zeros);
+    arma::mat Q;
+    std::pair<arma::Row<int>, arma::mat> stephens_out;
+    arma::Row<int> permutations_sample(K);
+    arma::Mat<int> permutations(nsamples - burnin, K);
 
     // At each sample, for each person:
     for (int j=1; j < nsamples; ++j) {
@@ -82,7 +102,7 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                 Nk = Ck.size();
                 
                 if (Nk > 0) {
-                    LHS = log(Nk + (alpha/K)) - log(N - 1 + alpha);
+                    LHS = log(Nk + (alpha_sampled(j-1)/K)) - log(N - 1 + alpha_sampled(j-1));
                     if (debug) Rcout << "Nk: " << Nk << "\n";
                     if (debug) Rcout << "LHS: " << LHS << "\n";
                     logLH = 0;
@@ -129,9 +149,6 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                 probs(k) /= probs_sum;
             }
 
-            // Save probabilities so can fix label switching after sampling
-            probs_out.tube(j, i) = as<arma::vec>(probs);
-
             // Sample z_i using R multinom as slightly more efficient
             // this returns a ones hot encoded binary that needs converting to int
             rmultinom(1, probs.begin(), K, this_z.begin());
@@ -139,6 +156,20 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
             if (debug) Rcout << "probs_sum: " << probs_sum << "\n";
             if (debug) Rcout << "Normalised probs: " << probs << "\n";
             if (debug) Rcout << "sampled z: " << this_z << "\n";
+            
+            // Save initial probabilities so can do batch Stephens
+            // to generate initial Q
+            if (relabel) {
+                if (j < burnin && j >= (burnin - burnrelabel)) {
+                    for (int k=0; k < K; ++k) {
+                        probs_out(i, k, j - burnin + burnrelabel) = probs(k);
+                    }
+                } else if (j >= burnin) {
+                    for (int k=0; k < K; ++k) {
+                        probs_sample(i, k) = probs(k);
+                    }
+                }
+            }
 
             // Save cluster assignment as label in 1...K rather than one hot encoded binary
             for (int k = 0; k < K; ++k) {
@@ -148,7 +179,27 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                     continue;
                 }
             }
+        }  // End 1:N loop
+        
+        // To relabel clusters use Stephen's 2000b online algorithm.
+        // Firstly need to initialise Q with values taken from a batch formulation
+        // over $burnrelabel samples
+        if (relabel) {
+            if (j == (burnin - 1)) {
+                Rcout << "Running Stephens Batch relabelling to identify initial Q values\n";
+                Q = my_stephens_batch(probs_out, false);
+            } else if (j >= burnin) {
+                stephens_out = my_stephens_online(Q, probs_sample, j, false);
+                Q = stephens_out.second;
+                permutations_sample = stephens_out.first;
+                // Relabel Z 
+                permutations.row(j-burnin) = permutations_sample;
+                for (int i = 0; i < N; ++i) {
+                    z_out_relabelled(j, i) = permutations_sample(z_out(j, i) - 1) + 1;
+                }
+            }
         }
+        
 
         // Estimate thetas
         for (int k=0; k < K; ++k) {
@@ -161,18 +212,34 @@ List collapsed_gibbs_cpp(IntegerMatrix df,
                 }
                 if (debug) Rcout << "Theta k: " << k << "\td: " << d << "\tdsum: " << dsum << "\tNk: " << Nk << "\tdsum / NK: " << dsum / (double)Nk << "\n";
                 thetas(k, d, j) = dsum / (double)Nk;
+                if (relabel && j >= burnin) {
+                    thetas_relab(permutations_sample(k), d, j) = dsum / (double)Nk;
+                }
             }
+        }
+        
+        // Update alpha
+        if (alpha == 0) {
+            alpha_sampled(j) = update_alpha(alpha_sampled(j-1), a, b, N, K);
         }
     }
     
-    List ret;
-    ret["z"] = z_out.rows(burnin, nsamples-1);
     // Due to how subcubes work (i.e. when have sliced them), can't just
     // return directly, but instead need to force as cube
+    List ret;
     arma::cube thetas_post = thetas.tail_slices(nsamples - burnin);
-    arma::cube probs_post = probs_out.rows(burnin, nsamples-1);
-    ret["theta"] = thetas_post;
-    ret["probabilities"] = probs_post;
+    ret["alpha"] = alpha_sampled.tail_rows(nsamples-burnin);
+    ret["permutations"] = permutations;
+    if (relabel) {
+        arma::cube thetas_relabelled = thetas_relab.tail_slices(nsamples - burnin);
+        ret["z"] = z_out_relabelled.tail_rows(nsamples-burnin);
+        ret["theta"] = thetas_relabelled;
+        ret["z_original"] = z_out.tail_rows(nsamples-burnin);
+        ret["theta_original"] = thetas_post;
+    } else {
+        ret["z"] = z_out.tail_rows(nsamples-burnin);
+        ret["theta"] = thetas_post;
+    }
     return ret;
 }
 

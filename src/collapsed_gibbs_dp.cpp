@@ -80,8 +80,14 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     std::vector <int> Ck;
     double b_eps, pi, pi1, pi2;
     arma::vec alpha_sampled(nsamples);
-    alpha_sampled(0) = alpha;
+    if (alpha == 0) {
+        alpha_sampled(0) = 1;
+    } else {
+        alpha_sampled.fill(alpha);
+    }
     double alpha_new, foobar, sumprob, left_denom;
+    
+    // Relabelling data structures
     arma::cube probs_out(N, maxK, burnrelabel, arma::fill::zeros);
     arma::mat probs_sample(N, maxK, arma::fill::zeros);
     arma::mat Q;
@@ -227,9 +233,11 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
             allocations(j, i) = ret + 1;
             if (debug) Rcout << "After sampling. Length choices: " << choices.size() << "\tLength used_clusters: " << used_clusters.size() << "\tLength unused clusters: " << unused_clusters.size() << "\tK: " << K << "\n";
 
-            alpha_new = update_alpha(alpha_sampled(j-1), a, b, N, K);
-            if (debug) Rcout << "b-log(epsilon): " << b_eps << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
-            alpha_sampled(j) = alpha_new;
+            if (alpha == 0) {
+                alpha_new = update_alpha(alpha_sampled(j-1), a, b, N, K);
+                if (debug) Rcout << "b-log(epsilon): " << b_eps << "\tpi: " << pi << "\tALPHA: " << alpha_new << "\n";
+                alpha_sampled(j) = alpha_new;
+            }
             
         }  // End for 1:N loop
         
@@ -276,15 +284,18 @@ List collapsed_gibbs_dp_cpp(IntegerMatrix df,
     
     List out;
     arma::cube thetas_post = thetas.tail_slices(nsamples - burnin);
-    arma::cube thetas_relabelled = thetas_relab.tail_slices(nsamples - burnin);
-    if (relabel) {
-        out["z_relabelled"] = allocations_relabelled.tail_rows(nsamples-burnin);
-        out["theta_relabelled"] = thetas_relabelled;
-    }
-    out["z"] = allocations.tail_rows(nsamples-burnin);
-    out["theta"] = thetas_post;
     out["alpha"] = alpha_sampled.tail(nsamples-burnin);
     out["permutations"] = permutations;
+    if (relabel) {
+        arma::cube thetas_relabelled = thetas_relab.tail_slices(nsamples - burnin);
+        out["z"] = allocations_relabelled.tail_rows(nsamples-burnin);
+        out["theta"] = thetas_relabelled;
+        out["z_original"] = allocations.tail_rows(nsamples-burnin);
+        out["theta_original"] = thetas_post;
+    } else {
+        out["z"] = allocations.tail_rows(nsamples-burnin);
+        out["theta"] = thetas_post;
+    }
     return out;
 }
 
