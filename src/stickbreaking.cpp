@@ -42,7 +42,11 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
     double loglh, cum_probs, dummy, theta_update;
     pi_sampled(0, _) = initialPi;
     arma::vec alpha_sampled(nsamples);
-    alpha_sampled(0) = alpha;
+    if (alpha == 0) {
+        alpha_sampled(0) = 1;
+    } else {
+        alpha_sampled.fill(alpha);
+    }
     theta_sampled.slice(0) = as<arma::mat>(initialTheta);
     NumericMatrix thisTheta(maxK,P);
     IntegerVector this_z(maxK);
@@ -224,7 +228,9 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
         if (debug) Rcout << "Theta: " << theta_row << "\n";
         
         // Update alpha
-        alpha_sampled(j) = update_alpha(alpha_sampled(j-1), a, b, N, K_viable);
+        if (alpha == 0) {
+            alpha_sampled(j) = update_alpha(alpha_sampled(j-1), a, b, N, K_viable);
+        }
     }  // End sampling loop
     
     List ret;
