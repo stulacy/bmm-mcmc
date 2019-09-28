@@ -54,6 +54,8 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
     arma::vec dirich_params = arma::zeros(maxK);
     NumericVector this_pi(maxK);
     NumericMatrix theta_row(maxK, P);
+    
+    // Data structures for relabelling
     arma::cube probs_out(N, maxK, burnrelabel, arma::fill::zeros);
     arma::mat probs_sample(N, maxK, arma::fill::zeros);
     arma::mat Q;
@@ -237,9 +239,10 @@ List gibbs_stickbreaking_cpp(IntegerMatrix df,
     arma::cube thetas_post = theta_sampled.tail_slices(nsamples - burnin);
     ret["pi"] = pi_sampled(Range(burnin, nsamples-1), _);
     ret["alpha"] = alpha_sampled.tail_rows(nsamples-burnin);
+    ret["permutations"] = permutations;
     if (relabel) {
-        ret["z"] = z_out_relabelled.tail_rows(nsamples-burnin);
         arma::cube thetas_relabelled = theta_relab.tail_slices(nsamples - burnin);
+        ret["z"] = z_out_relabelled.tail_rows(nsamples-burnin);
         ret["theta"] = thetas_relabelled;
         ret["z_original"] = z_out.tail_rows(nsamples-burnin);
         ret["theta_original"] = thetas_post;
