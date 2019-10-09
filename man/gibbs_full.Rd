@@ -4,8 +4,9 @@
 \alias{gibbs_full}
 \title{Full Gibbs sampler for finite Bernoulli Mixture Model}
 \usage{
-gibbs_full(data, nsamples, K, alpha = 1, beta = 0.5, gamma = 0.5,
-  burnin = NULL, debug = FALSE)
+gibbs_full(data, nsamples, K, alpha = NULL, beta = 0.5, gamma = 0.5,
+  a = 1, b = 1, burnin = NULL, relabel = FALSE, burnrelabel = 50,
+  debug = FALSE)
 }
 \arguments{
 \item{data}{Data frame or matrix with observations in rows and binary

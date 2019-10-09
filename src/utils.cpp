@@ -12,3 +12,13 @@ double update_alpha(double alpha_old, double a, double b, int N, int K) {
     alpha_new = pi * R::rgamma(a+K, 1/(b_eps)) + (1-pi) * R::rgamma(a+K-1, 1/(b_eps));
     return alpha_new;
 }
+
+void print_clusters(std::vector < std::vector < int > > clusters) {
+    for (unsigned int i=0; i < clusters.size(); i++) {
+        Rcout << "Cluster: " << i << "\n";
+        for (auto it : clusters[i]) {
+            Rcout << "Individual: " << it << "\n";
+        }
+    }
+}
+

@@ -106,6 +106,75 @@ gibbs_stickbreaking <- function(data, nsamples, maxK, alpha=NULL, beta=0.5, gamm
                             debug)
 }
 
+#' @export
+alloc_test <- function() {
+    library(BayesBinMix)
+    set.seed(1)
+    d <- 10 # number of columns
+    n <- 50 # number of rows (sample size)
+    K <- 2 	 # true number of clusters
+    p.true <- myDirichlet(rep(10,K)) # true weight of each cluster
+    z.true <- numeric(n) # true cluster membership
+    z.true <- sample(K,n,replace=TRUE,prob = p.true)
+    #true probability of positive responses per cluster:
+    theta.true <- array(data = NA, dim = c(K,d)) 
+    for(j in 1:d){
+        theta.true[,j] <- rbeta(K, shape1 = 1, shape2 = 1)
+    }
+    x <- array(data=NA,dim = c(n,d)) # data: n X d array
+    for(k in 1:K){
+        myIndex <- which(z.true == k)
+        for (j in 1:d){
+            x[myIndex,j] <- rbinom(n = length(myIndex), 
+                                   size = 1, prob = theta.true[k,j])   
+        }
+    }
+    
+    initial_K <- c(rep(1, nrow(x)/2),
+                   rep(2, nrow(x)/2)) 
+    foo <- allocation_cpp(x,  # df
+                   initial_K,    # initial k
+                   2,          # n samples
+                   10,           # max K
+                   1,            # alpha
+                   0.5,          # beta
+                   0.5,          # gamma
+                   1,            # a
+                   1,            # b
+                   0,           # burnin
+                   FALSE,        # relabel
+                   1,           # burnrelabel
+                   TRUE)         # debug
+}
+
+bbm_test <- function() {
+    library(BayesBinMix)
+    set.seed(1)
+    d <- 10 # number of columns
+    n <- 50 # number of rows (sample size)
+    K <- 2 	 # true number of clusters
+    p.true <- myDirichlet(rep(10,K)) # true weight of each cluster
+    z.true <- numeric(n) # true cluster membership
+    z.true <- sample(K,n,replace=TRUE,prob = p.true)
+    #true probability of positive responses per cluster:
+    theta.true <- array(data = NA, dim = c(K,d)) 
+    for(j in 1:d){
+        theta.true[,j] <- rbeta(K, shape1 = 1, shape2 = 1)
+    }
+    x <- array(data=NA,dim = c(n,d)) # data: n X d array
+    for(k in 1:K){
+        myIndex <- which(z.true == k)
+        for (j in 1:d){
+            x[myIndex,j] <- rbinom(n = length(myIndex), 
+                                   size = 1, prob = theta.true[k,j])   
+        }
+    }
+    foo <- allocationSamplerBinMix2(Kmax=10, m=1000, burn=10, data=x,
+                                    outputDir = "foo", ClusterPrior = "poisson",
+                                    zStart = c(rep(1, nrow(x)/2), rep(2, nrow(x)/2)))
+}
+
+
 #' Plots samples from Bernoulli mixture models
 #' 
 #' @importFrom magrittr "%>%"

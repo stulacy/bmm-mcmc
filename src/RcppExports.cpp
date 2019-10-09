@@ -6,6 +6,29 @@
 
 using namespace Rcpp;
 
+// allocation_cpp
+List allocation_cpp(IntegerMatrix df, IntegerVector initialK, int nsamples, int maxK, double alpha, double beta, double gamma, double a, double b, int burnin, bool relabel, int burnrelabel, bool debug);
+RcppExport SEXP _bmmmcmc_allocation_cpp(SEXP dfSEXP, SEXP initialKSEXP, SEXP nsamplesSEXP, SEXP maxKSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP gammaSEXP, SEXP aSEXP, SEXP bSEXP, SEXP burninSEXP, SEXP relabelSEXP, SEXP burnrelabelSEXP, SEXP debugSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< IntegerMatrix >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type initialK(initialKSEXP);
+    Rcpp::traits::input_parameter< int >::type nsamples(nsamplesSEXP);
+    Rcpp::traits::input_parameter< int >::type maxK(maxKSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< double >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< double >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< double >::type a(aSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< int >::type burnin(burninSEXP);
+    Rcpp::traits::input_parameter< bool >::type relabel(relabelSEXP);
+    Rcpp::traits::input_parameter< int >::type burnrelabel(burnrelabelSEXP);
+    Rcpp::traits::input_parameter< bool >::type debug(debugSEXP);
+    rcpp_result_gen = Rcpp::wrap(allocation_cpp(df, initialK, nsamples, maxK, alpha, beta, gamma, a, b, burnin, relabel, burnrelabel, debug));
+    return rcpp_result_gen;
+END_RCPP
+}
 // collapsed_gibbs_cpp
 List collapsed_gibbs_cpp(IntegerMatrix df, IntegerVector initialK, int nsamples, int K, double alpha, double beta, double gamma, double a, double b, int burnin, bool relabel, int burnrelabel, bool debug);
 RcppExport SEXP _bmmmcmc_collapsed_gibbs_cpp(SEXP dfSEXP, SEXP initialKSEXP, SEXP nsamplesSEXP, SEXP KSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP gammaSEXP, SEXP aSEXP, SEXP bSEXP, SEXP burninSEXP, SEXP relabelSEXP, SEXP burnrelabelSEXP, SEXP debugSEXP) {
@@ -135,6 +158,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_bmmmcmc_allocation_cpp", (DL_FUNC) &_bmmmcmc_allocation_cpp, 13},
     {"_bmmmcmc_collapsed_gibbs_cpp", (DL_FUNC) &_bmmmcmc_collapsed_gibbs_cpp, 13},
     {"_bmmmcmc_collapsed_gibbs_dp_cpp", (DL_FUNC) &_bmmmcmc_collapsed_gibbs_dp_cpp, 12},
     {"_bmmmcmc_rdirichlet_cpp", (DL_FUNC) &_bmmmcmc_rdirichlet_cpp, 1},

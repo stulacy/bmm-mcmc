@@ -3,20 +3,9 @@
 #include <RcppArmadilloExtensions/sample.h>
 #include <stdlib.h>
 #include <queue>
-#include "stephens.h"
 #include "utils.h"
 
 using namespace Rcpp;
-
-void print_clusters(std::vector < std::vector < int > > clusters) {
-    for (unsigned int i=0; i < clusters.size(); i++) {
-        Rcout << "Cluster: " << i << "\n";
-        for (auto it : clusters[i]) {
-            Rcout << "Individual: " << it << "\n";
-        }
-    }
-}
-
 
 // Collapsed Gibbs sampler using Dirichlet Process Prior on cluster weights
 // Using Algorithm 3 from Neal as basis

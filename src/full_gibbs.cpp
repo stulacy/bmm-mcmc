@@ -1,6 +1,5 @@
 // [[Rcpp::depends(RcppArmadillo)]]
 #include "utils.h"
-#include "stephens.h"
 
 using namespace Rcpp;
 

@@ -4,8 +4,8 @@
 \alias{gibbs_dp}
 \title{Collapsed Gibbs sampler for infinite Bernoulli Mixture Model}
 \usage{
-gibbs_dp(data, nsamples, a = 1, b = 1, alpha = 1, beta = 0.5,
-  gamma = 0.5, burnin = NULL, relabel = TRUE, burnrelabel = 50,
+gibbs_dp(data, nsamples, alpha = NULL, a = 1, b = 1, beta = 0.5,
+  gamma = 0.5, burnin = NULL, relabel = FALSE, burnrelabel = 50,
   maxK = 30, debug = FALSE)
 }
 \arguments{
@@ -14,11 +14,11 @@ variables in columns}
 
 \item{nsamples}{Number of samples to take}
 
+\item{alpha}{Starting value of alpha}
+
 \item{a}{First Gamma parameter on prior on Alpha}
 
 \item{b}{Second Gamma parameter on prior on Alpha}
-
-\item{alpha}{Starting value of alpha}
 
 \item{beta}{First Beta parameter on prior used for all Bernoulli
 variables across all components}

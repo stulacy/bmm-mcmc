@@ -4,16 +4,15 @@
 \alias{gibbs_stickbreaking}
 \title{Stick breaking blocked Gibbs sampler for infinite Bernoulli Mixture Model}
 \usage{
-gibbs_stickbreaking(data, nsamples, K, alpha = 1, beta = 0.5,
-  gamma = 0.5, burnin = NULL, debug = FALSE)
+gibbs_stickbreaking(data, nsamples, maxK, alpha = NULL, beta = 0.5,
+  gamma = 0.5, a = 1, b = 1, burnin = NULL, relabel = FALSE,
+  burnrelabel = 50, debug = FALSE)
 }
 \arguments{
 \item{data}{Data frame or matrix with observations in rows and binary
 variables in columns}
 
 \item{nsamples}{Number of samples to take}
-
-\item{K}{Number of mixtures}
 
 \item{alpha}{Concentration parameter}
 
@@ -26,6 +25,8 @@ variables across all components}
 \item{burnin}{Number of samples to discard at start of chain}
 
 \item{debug}{Whether to display debug messages.}
+
+\item{K}{Number of mixtures}
 }
 \value{
 A list with sampled values pi, z, and theta.
